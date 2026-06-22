@@ -60,8 +60,8 @@ host grants only the capabilities a plugin's `manifest.toml` declares.
 
 `registry.json` is **generated** — the [publish workflow](./.github/workflows/publish.yml)
 builds every `plugins/*`, packages the zips, uploads them to the `plugins`
-release, and commits a refreshed index. It starts empty and is populated on the
-first publish run.
+release, and commits a refreshed index. The checked-in copy is a seed; the
+`sha256`/`url` become live once the publish workflow uploads the release assets.
 
 ## Add a plugin
 
