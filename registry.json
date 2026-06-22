@@ -1,48 +1,26 @@
 {
   "plugins": [
     {
-      "name": "image-gen-fal",
+      "name": "mastodon-post",
       "version": "0.1.0",
-      "description": "Generate images from text prompts using fal.ai Flux models",
+      "description": "Post a status (toot) to a Mastodon instance",
       "author": "ZeroClaw Labs",
       "capabilities": [
         "tool"
       ],
-      "url": "https://github.com/zeroclaw-labs/zeroclaw-plugins/releases/download/plugins/image-gen-fal-0.1.0.zip",
-      "sha256": "489877d61bd7433a1fece02625c0034da4104a1b7b206a1d98233506f763f713"
+      "url": "https://github.com/zeroclaw-labs/zeroclaw-plugins/releases/download/plugins/mastodon-post-0.1.0.zip",
+      "sha256": "ed9d2791ff756cc3b99bb4dacdcd10ede5a1798ee0d3d5c8ed51d596cfafa970"
     },
     {
-      "name": "languagetool",
+      "name": "wikipedia-summary",
       "version": "0.1.0",
-      "description": "Check text for grammar, spelling, and style via LanguageTool (self-hostable)",
+      "description": "Look up a short factual summary of a topic from Wikipedia",
       "author": "ZeroClaw Labs",
       "capabilities": [
         "tool"
       ],
-      "url": "https://github.com/zeroclaw-labs/zeroclaw-plugins/releases/download/plugins/languagetool-0.1.0.zip",
-      "sha256": "679e92979168a89a2648ea4aeb03c318d6907a0d86364e8fdab9e5b3bc710a94"
-    },
-    {
-      "name": "office-tools",
-      "version": "0.1.0",
-      "description": "Extract text/Markdown from Office documents (DOCX, XLSX, PPTX, DOC, XLS, PPT) passed as base64",
-      "author": "ZeroClaw Labs",
-      "capabilities": [
-        "tool"
-      ],
-      "url": "https://github.com/zeroclaw-labs/zeroclaw-plugins/releases/download/plugins/office-tools-0.1.0.zip",
-      "sha256": "08fc6e53e9ac9fcd59f373693b058290b0564919b91320f32f39f5a05513c2a4"
-    },
-    {
-      "name": "sd-webui",
-      "version": "0.1.0",
-      "description": "Generate images locally via your own Stable Diffusion WebUI (AUTOMATIC1111)",
-      "author": "ZeroClaw Labs",
-      "capabilities": [
-        "tool"
-      ],
-      "url": "https://github.com/zeroclaw-labs/zeroclaw-plugins/releases/download/plugins/sd-webui-0.1.0.zip",
-      "sha256": "9c7569abb3081c2e1bdcd098b2f874026fbd0402ca627ec8420f1436b2ea00ca"
+      "url": "https://github.com/zeroclaw-labs/zeroclaw-plugins/releases/download/plugins/wikipedia-summary-0.1.0.zip",
+      "sha256": "11a3ccf41c5097669292f0d7c8340d65f9285950953bef01272a09dd005ff88e"
     }
   ]
 }
