@@ -1,7 +1,13 @@
 # mastodon-post
 
+> **Incubating — not installable on current hosts.** This plugin targets the
+> proposed host capability interface (`../wit/v0/host.wit`) that ZeroClaw does
+> not implement yet; the component fails to instantiate on a shipped host. See
+> [`../README.md`](../README.md). The build and install steps below describe
+> how it will work once the host capability interface lands.
+
 A WIT component plugin for ZeroClaw that posts a status (toot) to a Mastodon
-instance. It's the reference example for **host-injected credentials**: the
+instance. It demonstrates the proposed pattern for **host-injected credentials**: the
 plugin needs an access token, but the token is injected by the host at the HTTP
 boundary — the WASM guest never sees its value.
 
@@ -16,7 +22,7 @@ boundary — the WASM guest never sees its value.
 
 ```bash
 rustup target add wasm32-wasip2
-cd plugins/mastodon-post
+cd incubating/mastodon-post
 cargo build --target wasm32-wasip2 --release
 cp target/wasm32-wasip2/release/mastodon_post.wasm mastodon_post.wasm
 ```
@@ -41,7 +47,7 @@ MASTODON_TOKEN = "<your access token>"
 Then install and run:
 
 ```bash
-zeroclaw plugin install plugins/mastodon-post
+zeroclaw plugin install incubating/mastodon-post
 zeroclaw agent -a <your-agent> -m 'Post "hello from a wasm plugin" to my Mastodon at https://mastodon.social'
 ```
 
