@@ -22,7 +22,6 @@ plugins/<name>/        # published plugins — one wit-bindgen component per dir
   manifest.toml        # name, version, wasm_path, capabilities, permissions
   README.md
 wit/v0/                # vendored ZeroClaw plugin WIT contract (the ABI plugins build against)
-incubating/            # plugins targeting proposed host capabilities — NOT published
 registry.json          # GENERATED index — published by CI, do not hand-edit
 tools/build-registry.py
 .github/workflows/publish.yml
@@ -34,9 +33,9 @@ host grants only the capabilities a plugin's `manifest.toml` declares.
 
 `wit/v0/` is vendored **unmodified** from
 [zeroclaw `wit/v0`](https://github.com/zeroclaw-labs/zeroclaw/tree/master/wit/v0)
-— it is the contract the host actually implements. Plugins that need host
-capabilities beyond it (HTTP egress, secret existence checks) live in
-[`incubating/`](./incubating) until the host ships them.
+— it is the contract the host actually implements. Plugins requiring host
+capabilities beyond it (e.g. HTTP egress) are blocked on the upstream host
+capability interface ([zeroclaw#8135](https://github.com/zeroclaw-labs/zeroclaw/issues/8135)).
 
 ## How install works
 
