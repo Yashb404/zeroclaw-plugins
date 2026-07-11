@@ -31,7 +31,7 @@
         "channel"
       ],
       "url": "https://github.com/zeroclaw-labs/zeroclaw-plugins/releases/download/plugins/matrix-0.1.0.zip",
-      "sha256": "4230a18bec270dca9c6e6b9d822c8e8dcf3bb8d7df7bccc11d017ff21bc730e8"
+      "sha256": "b9c535d250fd17c4b117b5151cb2a800ee165fed49c0c44e27ec56b0d9cf6ec6"
     },
     {
       "name": "mattermost",
