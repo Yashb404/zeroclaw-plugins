@@ -204,6 +204,7 @@ fn test_ignore_mint_close_authority() {
 fn test_risk_score() {
     debug_log!("--- Running test_risk_score ---");
     let exts = MintExtensions {
+        supply: 0,
         mint_authority: Some([1; 32]),
         freeze_authority: None,
         permanent_delegate: None,
@@ -222,6 +223,7 @@ fn test_risk_score() {
 fn test_risk_score_green() {
     debug_log!("--- Running test_risk_score_green ---");
     let exts = MintExtensions {
+        supply: 0,
         mint_authority: None,
         freeze_authority: None,
         permanent_delegate: None,

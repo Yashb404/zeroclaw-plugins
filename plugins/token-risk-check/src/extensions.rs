@@ -1,5 +1,6 @@
 #[derive(Debug, Clone, PartialEq)]
 pub struct MintExtensions {
+    pub supply: u64,
     pub mint_authority: Option<[u8; 32]>,
     pub freeze_authority: Option<[u8; 32]>,
     pub permanent_delegate: Option<[u8; 32]>,
@@ -56,10 +57,15 @@ pub fn parse_mint_extensions(data: &[u8]) -> Result<MintExtensions, String> {
         return Err("Data too short for base Mint".into());
     }
 
+    let mut supply_bytes = [0u8; 8];
+    supply_bytes.copy_from_slice(&data[36..44]);
+    let supply = u64::from_le_bytes(supply_bytes);
+
     let mint_authority = read_coption_pubkey(data, 0)?;
     let freeze_authority = read_coption_pubkey(data, 46)?;
 
     let mut exts = MintExtensions {
+        supply,
         mint_authority,
         freeze_authority,
         permanent_delegate: None,

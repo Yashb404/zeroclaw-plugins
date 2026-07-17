@@ -164,6 +164,7 @@ fn test_top_holder_concentration_bps_zero_supply() {
 
 fn empty_exts() -> MintExtensions {
     MintExtensions {
+        supply: 0,
         mint_authority: None,
         freeze_authority: None,
         permanent_delegate: None,
