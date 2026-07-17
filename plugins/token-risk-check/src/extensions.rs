@@ -118,6 +118,7 @@ pub fn parse_mint_extensions(data: &[u8]) -> Result<MintExtensions, String> {
                     return Err("Truncated TransferFeeConfig".into());
                 }
                 let withdraw_withheld_authority = read_optional_nonzero_pubkey(ext_data, 32)?;
+                // Reading newer_transfer_fee (which becomes effective post-epoch change)
                 let transfer_fee_basis_points =
                     u16::from_le_bytes([ext_data[106], ext_data[107]]);
                 exts.transfer_fee_config = Some(TransferFeeConfig {
@@ -125,7 +126,7 @@ pub fn parse_mint_extensions(data: &[u8]) -> Result<MintExtensions, String> {
                     withdraw_withheld_authority,
                 });
             }
-            3 => {
+            6 => {
                 // DefaultAccountState
                 if ext_data.is_empty() {
                     return Err("Truncated DefaultAccountState".into());
