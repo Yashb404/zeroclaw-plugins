@@ -7,10 +7,56 @@ pub struct RiskAssessment {
     pub reasons: Vec<String>,
 }
 
-pub fn score(ext: &MintExtensions, known_hooks: &[String]) -> RiskAssessment {
+pub fn top_holder_concentration_bps(
+    top_holders: &[(String, u128)],
+    total_supply: u128,
+) -> Option<u32> {
+    if total_supply == 0 {
+        return None;
+    }
+
+    let mut sum: u128 = 0;
+    for (_, amount) in top_holders {
+        sum = sum.saturating_add(*amount);
+    }
+
+    let bps = (sum.saturating_mul(10_000)) / total_supply;
+    // Cap at 10000 just in case
+    Some(std::cmp::min(bps as u32, 10_000))
+}
+
+pub fn score(
+    ext: &MintExtensions,
+    known_hooks: &[String],
+    top_holder_concentration_bps: Option<u32>,
+    was_concentration_checked: bool,
+) -> RiskAssessment {
     let mut reasons = Vec::new();
     let mut is_red = false;
     let mut is_amber = false;
+
+    if was_concentration_checked {
+        if let Some(bps) = top_holder_concentration_bps {
+            // > 80% (8000 bps): High risk of immediate rug pull/price manipulation since a small group controls supply
+            if bps > 8000 {
+                is_red = true;
+                reasons.push(format!("Top holders control >80% of supply ({} bps). Extreme concentration risk.", bps));
+            } 
+            // > 50% (5000 bps): Significant concentration, susceptible to large price swings if whales sell
+            else if bps > 5000 {
+                is_amber = true;
+                reasons.push(format!("Top holders control >50% of supply ({} bps). High concentration risk.", bps));
+            }
+            // > 30% (3000 bps): Notable concentration, worth flagging but standard for early projects
+            else if bps > 3000 {
+                reasons.push(format!("Top holders control >30% of supply ({} bps). Notable concentration.", bps));
+            }
+        } else {
+            // Zero supply treated as red because we cannot assess distribution, not because zero supply is itself malicious.
+            is_red = true;
+            reasons.push("Mint supply is zero or unreadable — cannot assess distribution.".to_string());
+        }
+    }
 
     if ext.permanent_delegate.is_some() {
         is_red = true;

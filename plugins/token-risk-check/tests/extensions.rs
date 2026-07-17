@@ -212,7 +212,7 @@ fn test_risk_score() {
         default_account_state: None,
     };
     
-    let score = token_risk_check::risk::score(&exts, &[]);
+    let score = token_risk_check::risk::score(&exts, &[], None, false);
     debug_log!("Calculated risk score: {:?}", score);
     assert_eq!(score.risk, "amber");
     assert_eq!(score.reasons.len(), 1);
@@ -230,7 +230,7 @@ fn test_risk_score_green() {
         default_account_state: None,
     };
     
-    let score = token_risk_check::risk::score(&exts, &[]);
+    let score = token_risk_check::risk::score(&exts, &[], None, false);
     debug_log!("Calculated risk score: {:?}", score);
     assert_eq!(score.risk, "green");
     // It should have exactly one reason explaining why it's green
