@@ -23,10 +23,10 @@ fn create_coption_pubkey(pk: Option<[u8; 32]>) -> Vec<u8> {
     data
 }
 
-fn create_base_mint(mint_auth: Option<[u8; 32]>, freeze_auth: Option<[u8; 32]>) -> Vec<u8> {
+fn create_base_mint(mint_auth: Option<[u8; 32]>, freeze_auth: Option<[u8; 32]>, supply: u64) -> Vec<u8> {
     let mut data = Vec::new();
     data.extend_from_slice(&create_coption_pubkey(mint_auth));
-    data.extend_from_slice(&[0; 8]); // supply
+    data.extend_from_slice(&supply.to_le_bytes()); // supply
     data.push(0); // decimals
     data.push(1); // is_initialized
     data.extend_from_slice(&create_coption_pubkey(freeze_auth));
@@ -54,10 +54,11 @@ fn test_parse_base_mint() {
     debug_log!("--- Running test_parse_base_mint ---");
     let mint_auth = [1u8; 32];
     let freeze_auth = [2u8; 32];
-    let data = create_base_mint(Some(mint_auth), Some(freeze_auth));
+    let data = create_base_mint(Some(mint_auth), Some(freeze_auth), 123456789);
     
     let exts = parse_mint_extensions(&data).unwrap();
     debug_log!("Parsed extensions: {:?}", exts);
+    assert_eq!(exts.supply, 123456789);
     assert_eq!(exts.mint_authority, Some(mint_auth));
     assert_eq!(exts.freeze_authority, Some(freeze_auth));
     assert_eq!(exts.permanent_delegate, None);
@@ -66,7 +67,7 @@ fn test_parse_base_mint() {
 #[test]
 fn test_parse_transfer_fee_config() {
     debug_log!("--- Running test_parse_transfer_fee_config ---");
-    let mut data = create_base_mint(None, None);
+    let mut data = create_base_mint(None, None, 0);
     data.extend_from_slice(&create_padding());
     
     let mut tf_data = vec![0u8; 108];
@@ -89,7 +90,7 @@ fn test_parse_transfer_fee_config() {
 #[test]
 fn test_parse_transfer_fee_config_truncated() {
     debug_log!("--- Running test_parse_transfer_fee_config_truncated ---");
-    let mut data = create_base_mint(None, None);
+    let mut data = create_base_mint(None, None, 0);
     data.extend_from_slice(&create_padding());
     let tf_data = vec![0u8; 100]; // Too short! (needs 108)
     data.extend_from_slice(&create_tlv(1, &tf_data));
@@ -102,7 +103,7 @@ fn test_parse_transfer_fee_config_truncated() {
 #[test]
 fn test_parse_transfer_hook() {
     debug_log!("--- Running test_parse_transfer_hook ---");
-    let mut data = create_base_mint(None, None);
+    let mut data = create_base_mint(None, None, 0);
     data.extend_from_slice(&create_padding());
     
     let mut th_data = vec![0u8; 64];
@@ -119,7 +120,7 @@ fn test_parse_transfer_hook() {
 #[test]
 fn test_parse_transfer_hook_truncated() {
     debug_log!("--- Running test_parse_transfer_hook_truncated ---");
-    let mut data = create_base_mint(None, None);
+    let mut data = create_base_mint(None, None, 0);
     data.extend_from_slice(&create_padding());
     let th_data = vec![0u8; 50]; // Too short! (needs 64)
     data.extend_from_slice(&create_tlv(14, &th_data));
@@ -132,7 +133,7 @@ fn test_parse_transfer_hook_truncated() {
 #[test]
 fn test_parse_permanent_delegate() {
     debug_log!("--- Running test_parse_permanent_delegate ---");
-    let mut data = create_base_mint(None, None);
+    let mut data = create_base_mint(None, None, 0);
     data.extend_from_slice(&create_padding());
     
     let mut pd_data = vec![0u8; 32];
@@ -149,7 +150,7 @@ fn test_parse_permanent_delegate() {
 #[test]
 fn test_parse_permanent_delegate_truncated() {
     debug_log!("--- Running test_parse_permanent_delegate_truncated ---");
-    let mut data = create_base_mint(None, None);
+    let mut data = create_base_mint(None, None, 0);
     data.extend_from_slice(&create_padding());
     let pd_data = vec![0u8; 20]; // Too short! (needs 32)
     data.extend_from_slice(&create_tlv(12, &pd_data));
@@ -161,7 +162,7 @@ fn test_parse_permanent_delegate_truncated() {
 
 #[test]
 fn test_parse_default_account_state() {
-    let mut data = create_base_mint(None, None);
+    let mut data = create_base_mint(None, None, 0);
     data.extend_from_slice(&create_padding());
     
     let das_data = vec![2u8]; // Frozen
@@ -174,7 +175,7 @@ fn test_parse_default_account_state() {
 #[test]
 fn test_parse_default_account_state_truncated() {
     debug_log!("--- Running test_parse_default_account_state_truncated ---");
-    let mut data = create_base_mint(None, None);
+    let mut data = create_base_mint(None, None, 0);
     data.extend_from_slice(&create_padding());
     let das_data = vec![]; // Too short! (needs 1)
     data.extend_from_slice(&create_tlv(6, &das_data));
@@ -187,7 +188,7 @@ fn test_parse_default_account_state_truncated() {
 #[test]
 fn test_ignore_mint_close_authority() {
     debug_log!("--- Running test_ignore_mint_close_authority ---");
-    let mut data = create_base_mint(None, None);
+    let mut data = create_base_mint(None, None, 0);
     data.extend_from_slice(&create_padding());
     
     // MintCloseAuthority is discriminant 3, length 32

@@ -43,7 +43,7 @@ pub fn fetch_mint_account(
         .ok_or_else(|| "Missing or malformed data field in account info".to_string())?;
 
     let base64_str = data_arr
-        .get(0)
+        .first()
         .and_then(|s| s.as_str())
         .ok_or_else(|| "Missing or malformed base64 string in data array".to_string())?;
 
