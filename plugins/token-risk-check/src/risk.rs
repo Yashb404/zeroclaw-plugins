@@ -18,13 +18,24 @@ pub fn score(ext: &MintExtensions, known_hooks: &[String]) -> RiskAssessment {
     }
 
     if let Some(state) = ext.default_account_state {
-        if state == 2 {
-            is_red = true;
-            reasons.push("Default account state is Frozen; all new accounts are frozen by default.".to_string());
+        match state {
+            2 => {
+                is_red = true;
+                reasons.push("Default account state is Frozen; all new accounts are frozen by default.".to_string());
+            }
+            0 | 1 => {
+                // 0 = Uninitialized, 1 = Initialized (unfrozen). These are standard/safe states.
+            }
+            _ => {
+                is_amber = true;
+                reasons.push(format!("Unknown default account state: {}", state));
+            }
         }
     }
 
     if let Some(TransferFeeConfig { transfer_fee_basis_points, withdraw_withheld_authority: _ }) = ext.transfer_fee_config {
+        // 1000 bps = 10%. We flag >10% as unusually high (amber) because legitimate protocols 
+        // typically charge 0.1% to 1%, whereas honeypots/scam tokens often charge extreme fees (e.g., 99%).
         if transfer_fee_basis_points > 1000 {
             is_amber = true;
             reasons.push(format!("Transfer fee is unusually high ({} bps).", transfer_fee_basis_points));
@@ -44,10 +55,12 @@ pub fn score(ext: &MintExtensions, known_hooks: &[String]) -> RiskAssessment {
     }
 
     if ext.mint_authority.is_some() {
+        is_amber = true;
         reasons.push("Mint authority is active; supply can be inflated.".to_string());
     }
 
     if ext.freeze_authority.is_some() {
+        is_amber = true;
         reasons.push("Freeze authority is active; individual accounts can be frozen.".to_string());
     }
 

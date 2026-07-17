@@ -214,6 +214,26 @@ fn test_risk_score() {
     
     let score = token_risk_check::risk::score(&exts, &[]);
     debug_log!("Calculated risk score: {:?}", score);
-    assert_eq!(score.risk, "green");
+    assert_eq!(score.risk, "amber");
     assert_eq!(score.reasons.len(), 1);
+}
+
+#[test]
+fn test_risk_score_green() {
+    debug_log!("--- Running test_risk_score_green ---");
+    let exts = MintExtensions {
+        mint_authority: None,
+        freeze_authority: None,
+        permanent_delegate: None,
+        transfer_hook_program_id: None,
+        transfer_fee_config: None,
+        default_account_state: None,
+    };
+    
+    let score = token_risk_check::risk::score(&exts, &[]);
+    debug_log!("Calculated risk score: {:?}", score);
+    assert_eq!(score.risk, "green");
+    // It should have exactly one reason explaining why it's green
+    assert_eq!(score.reasons.len(), 1);
+    assert!(score.reasons[0].contains("No high-risk extensions found"));
 }
