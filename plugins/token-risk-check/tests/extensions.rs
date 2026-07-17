@@ -1,0 +1,170 @@
+use token_risk_check::extensions::*;
+
+fn create_coption_pubkey(pk: Option<[u8; 32]>) -> Vec<u8> {
+    let mut data = Vec::new();
+    if let Some(p) = pk {
+        data.extend_from_slice(&[1, 0, 0, 0]);
+        data.extend_from_slice(&p);
+    } else {
+        data.extend_from_slice(&[0, 0, 0, 0]);
+        data.extend_from_slice(&[0; 32]);
+    }
+    data
+}
+
+fn create_base_mint(mint_auth: Option<[u8; 32]>, freeze_auth: Option<[u8; 32]>) -> Vec<u8> {
+    let mut data = Vec::new();
+    data.extend_from_slice(&create_coption_pubkey(mint_auth));
+    data.extend_from_slice(&[0; 8]); // supply
+    data.push(0); // decimals
+    data.push(1); // is_initialized
+    data.extend_from_slice(&create_coption_pubkey(freeze_auth));
+    assert_eq!(data.len(), 82);
+    data
+}
+
+fn create_padding() -> Vec<u8> {
+    let mut data = vec![0u8; 83]; // 82 to 164 is 83 zeros
+    data.push(1); // AccountType at 165
+    assert_eq!(data.len(), 84);
+    data
+}
+
+fn create_tlv(ext_type: u16, value: &[u8]) -> Vec<u8> {
+    let mut data = Vec::new();
+    data.extend_from_slice(&ext_type.to_le_bytes());
+    data.extend_from_slice(&(value.len() as u16).to_le_bytes());
+    data.extend_from_slice(value);
+    data
+}
+
+#[test]
+fn test_parse_base_mint() {
+    let mint_auth = [1u8; 32];
+    let freeze_auth = [2u8; 32];
+    let data = create_base_mint(Some(mint_auth), Some(freeze_auth));
+    
+    let exts = parse_mint_extensions(&data).unwrap();
+    assert_eq!(exts.mint_authority, Some(mint_auth));
+    assert_eq!(exts.freeze_authority, Some(freeze_auth));
+    assert_eq!(exts.permanent_delegate, None);
+}
+
+#[test]
+fn test_parse_transfer_fee_config() {
+    let mut data = create_base_mint(None, None);
+    data.extend_from_slice(&create_padding());
+    
+    let mut tf_data = vec![0u8; 108];
+    // withdraw_withheld_authority (offset 32, 32 bytes)
+    let withdraw_auth = [3u8; 32];
+    tf_data[32..64].copy_from_slice(&withdraw_auth);
+    // basis points (offset 106, 2 bytes)
+    tf_data[106] = 50; // 50 bps
+    
+    data.extend_from_slice(&create_tlv(1, &tf_data));
+    
+    let exts = parse_mint_extensions(&data).unwrap();
+    assert_eq!(exts.transfer_fee_config, Some(TransferFeeConfig {
+        transfer_fee_basis_points: 50,
+        withdraw_withheld_authority: Some(withdraw_auth)
+    }));
+}
+
+#[test]
+fn test_parse_transfer_fee_config_truncated() {
+    let mut data = create_base_mint(None, None);
+    data.extend_from_slice(&create_padding());
+    let tf_data = vec![0u8; 100]; // Too short! (needs 108)
+    data.extend_from_slice(&create_tlv(1, &tf_data));
+    
+    assert!(parse_mint_extensions(&data).is_err());
+}
+
+#[test]
+fn test_parse_transfer_hook() {
+    let mut data = create_base_mint(None, None);
+    data.extend_from_slice(&create_padding());
+    
+    let mut th_data = vec![0u8; 64];
+    let program_id = [4u8; 32];
+    th_data[32..64].copy_from_slice(&program_id);
+    
+    data.extend_from_slice(&create_tlv(14, &th_data));
+    
+    let exts = parse_mint_extensions(&data).unwrap();
+    assert_eq!(exts.transfer_hook_program_id, Some(program_id));
+}
+
+#[test]
+fn test_parse_transfer_hook_truncated() {
+    let mut data = create_base_mint(None, None);
+    data.extend_from_slice(&create_padding());
+    let th_data = vec![0u8; 50]; // Too short! (needs 64)
+    data.extend_from_slice(&create_tlv(14, &th_data));
+    
+    assert!(parse_mint_extensions(&data).is_err());
+}
+
+#[test]
+fn test_parse_permanent_delegate() {
+    let mut data = create_base_mint(None, None);
+    data.extend_from_slice(&create_padding());
+    
+    let mut pd_data = vec![0u8; 32];
+    let delegate = [5u8; 32];
+    pd_data[0..32].copy_from_slice(&delegate);
+    
+    data.extend_from_slice(&create_tlv(12, &pd_data));
+    
+    let exts = parse_mint_extensions(&data).unwrap();
+    assert_eq!(exts.permanent_delegate, Some(delegate));
+}
+
+#[test]
+fn test_parse_permanent_delegate_truncated() {
+    let mut data = create_base_mint(None, None);
+    data.extend_from_slice(&create_padding());
+    let pd_data = vec![0u8; 20]; // Too short! (needs 32)
+    data.extend_from_slice(&create_tlv(12, &pd_data));
+    
+    assert!(parse_mint_extensions(&data).is_err());
+}
+
+#[test]
+fn test_parse_default_account_state() {
+    let mut data = create_base_mint(None, None);
+    data.extend_from_slice(&create_padding());
+    
+    let das_data = vec![2u8]; // Frozen
+    data.extend_from_slice(&create_tlv(3, &das_data));
+    
+    let exts = parse_mint_extensions(&data).unwrap();
+    assert_eq!(exts.default_account_state, Some(2));
+}
+
+#[test]
+fn test_parse_default_account_state_truncated() {
+    let mut data = create_base_mint(None, None);
+    data.extend_from_slice(&create_padding());
+    let das_data = vec![]; // Too short! (needs 1)
+    data.extend_from_slice(&create_tlv(3, &das_data));
+    
+    assert!(parse_mint_extensions(&data).is_err());
+}
+
+#[test]
+fn test_risk_score() {
+    let exts = MintExtensions {
+        mint_authority: Some([1; 32]),
+        freeze_authority: None,
+        permanent_delegate: None,
+        transfer_hook_program_id: None,
+        transfer_fee_config: None,
+        default_account_state: None,
+    };
+    
+    let score = token_risk_check::risk::score(&exts, &[]);
+    assert_eq!(score.risk, "green");
+    assert_eq!(score.reasons.len(), 1);
+}

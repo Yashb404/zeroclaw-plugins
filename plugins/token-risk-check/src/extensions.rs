@@ -1,0 +1,156 @@
+#[derive(Debug, Clone, PartialEq)]
+pub struct MintExtensions {
+    pub mint_authority: Option<[u8; 32]>,
+    pub freeze_authority: Option<[u8; 32]>,
+    pub permanent_delegate: Option<[u8; 32]>,
+    pub transfer_hook_program_id: Option<[u8; 32]>,
+    pub transfer_fee_config: Option<TransferFeeConfig>,
+    pub default_account_state: Option<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TransferFeeConfig {
+    pub transfer_fee_basis_points: u16,
+    pub withdraw_withheld_authority: Option<[u8; 32]>,
+}
+
+fn read_coption_pubkey(data: &[u8], offset: usize) -> Result<Option<[u8; 32]>, String> {
+    if data.len() < offset + 36 {
+        return Err(format!("Truncated COption<Pubkey> at offset {}", offset));
+    }
+    let tag = u32::from_le_bytes([
+        data[offset],
+        data[offset + 1],
+        data[offset + 2],
+        data[offset + 3],
+    ]);
+    if tag == 0 {
+        Ok(None)
+    } else if tag == 1 {
+        let mut pk = [0u8; 32];
+        pk.copy_from_slice(&data[offset + 4..offset + 36]);
+        Ok(Some(pk))
+    } else {
+        Err(format!("Invalid COption tag: {}", tag))
+    }
+}
+
+fn read_optional_nonzero_pubkey(data: &[u8], offset: usize) -> Result<Option<[u8; 32]>, String> {
+    if data.len() < offset + 32 {
+        return Err(format!(
+            "Truncated OptionalNonZeroPubkey at offset {}",
+            offset
+        ));
+    }
+    let mut pk = [0u8; 32];
+    pk.copy_from_slice(&data[offset..offset + 32]);
+    if pk == [0u8; 32] {
+        Ok(None)
+    } else {
+        Ok(Some(pk))
+    }
+}
+
+pub fn parse_mint_extensions(data: &[u8]) -> Result<MintExtensions, String> {
+    if data.len() < 82 {
+        return Err("Data too short for base Mint".into());
+    }
+
+    let mint_authority = read_coption_pubkey(data, 0)?;
+    let freeze_authority = read_coption_pubkey(data, 46)?;
+
+    let mut exts = MintExtensions {
+        mint_authority,
+        freeze_authority,
+        permanent_delegate: None,
+        transfer_hook_program_id: None,
+        transfer_fee_config: None,
+        default_account_state: None,
+    };
+
+    if data.len() <= 165 {
+        return Ok(exts);
+    }
+
+    if data[165] != 1 {
+        return Err(format!("Invalid AccountType: {}", data[165]));
+    }
+
+    // padding checks
+    for (i, &b) in data[82..165].iter().enumerate() {
+        if b != 0 {
+            return Err(format!("Non-zero padding at offset {}", 82 + i));
+        }
+    }
+
+    let mut offset = 166;
+    while offset < data.len() {
+        if offset + 2 > data.len() {
+            break;
+        }
+
+        let ext_type = u16::from_le_bytes([data[offset], data[offset + 1]]);
+        if ext_type == 0 {
+            break; // Uninitialized padding
+        }
+
+        if offset + 4 > data.len() {
+            return Err("Truncated TLV length".into());
+        }
+
+        let ext_len = u16::from_le_bytes([data[offset + 2], data[offset + 3]]) as usize;
+        let value_start = offset + 4;
+        let value_end = value_start + ext_len;
+
+        if value_end > data.len() {
+            return Err(format!(
+                "Extension {} length {} exceeds buffer",
+                ext_type, ext_len
+            ));
+        }
+
+        let ext_data = &data[value_start..value_end];
+
+        match ext_type {
+            1 => {
+                // TransferFeeConfig
+                if ext_data.len() < 108 {
+                    return Err("Truncated TransferFeeConfig".into());
+                }
+                let withdraw_withheld_authority = read_optional_nonzero_pubkey(ext_data, 32)?;
+                let transfer_fee_basis_points =
+                    u16::from_le_bytes([ext_data[106], ext_data[107]]);
+                exts.transfer_fee_config = Some(TransferFeeConfig {
+                    transfer_fee_basis_points,
+                    withdraw_withheld_authority,
+                });
+            }
+            3 => {
+                // DefaultAccountState
+                if ext_data.is_empty() {
+                    return Err("Truncated DefaultAccountState".into());
+                }
+                exts.default_account_state = Some(ext_data[0]);
+            }
+            12 => {
+                // PermanentDelegate
+                if ext_data.len() < 32 {
+                    return Err("Truncated PermanentDelegate".into());
+                }
+                exts.permanent_delegate = read_optional_nonzero_pubkey(ext_data, 0)?;
+            }
+            14 => {
+                // TransferHook
+                if ext_data.len() < 64 {
+                    return Err("Truncated TransferHook".into());
+                }
+                exts.transfer_hook_program_id = read_optional_nonzero_pubkey(ext_data, 32)?;
+            }
+            _ => {}
+        }
+
+        offset = value_end;
+    }
+
+    Ok(exts)
+}
