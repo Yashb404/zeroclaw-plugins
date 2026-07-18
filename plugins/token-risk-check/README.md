@@ -17,6 +17,7 @@ This plugin performs no signing, holds no keys, and executes no transactions. It
 ## Threat Model
 - **Attacker Goal**: Trick the LLM into labeling a malicious honeypot token as "safe" to induce a user to buy or interact with it.
 - **Defense**: The plugin is structurally deterministic. Its verdict is a pure function of the RPC bytes. The LLM only receives the finalized `{ risk, reasons }` JSON, making prompt-injected verdicts impossible. If the RPC fails or returns malformed data, the plugin fails closed (`success: false`).
+- **HTTP/RPC Boundaries**: `waki 0.5.1` does not expose a streaming reader; the `Content-Length` pre-check rejects declared-oversized responses before any read, and the host's configured wasm memory/fuel limits (`plugins.limits.max_memory_mb`, `plugins.limits.call_fuel`) are the enforced backstop against a chunked-encoding response that omits `Content-Length`.
 
 ## Config Keys
 In your host `manifest.toml` or configuration injection:

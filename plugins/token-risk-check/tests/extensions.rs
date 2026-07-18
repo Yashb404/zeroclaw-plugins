@@ -215,7 +215,7 @@ fn test_risk_score() {
         unknown_extensions: vec![],
     };
     
-    let score = token_risk_check::risk::score(&exts, &[], token_risk_check::risk::ConcentrationSignal::NotChecked, None);
+    let score = token_risk_check::risk::score(&exts, &[], token_risk_check::risk::ConcentrationSignal::NotChecked, None, None);
     debug_log!("Calculated risk score: {:?}", score);
     assert_eq!(score.risk, "amber");
     assert_eq!(score.reasons.len(), 1);
@@ -235,7 +235,7 @@ fn test_risk_score_green() {
         unknown_extensions: vec![],
     };
     
-    let score = token_risk_check::risk::score(&exts, &[], token_risk_check::risk::ConcentrationSignal::NotChecked, None);
+    let score = token_risk_check::risk::score(&exts, &[], token_risk_check::risk::ConcentrationSignal::NotChecked, None, None);
     debug_log!("Calculated risk score: {:?}", score);
     assert_eq!(score.risk, "green");
     // It should have exactly one reason explaining why it's green
@@ -258,7 +258,7 @@ fn test_risk_score_unverified_known_hook() {
         unknown_extensions: vec![],
     };
     
-    let score = token_risk_check::risk::score(&exts, &[hook_str], token_risk_check::risk::ConcentrationSignal::NotChecked, None);
+    let score = token_risk_check::risk::score(&exts, &[hook_str], token_risk_check::risk::ConcentrationSignal::NotChecked, None, None);
     
     assert_eq!(score.risk, "amber");
     assert!(score.reasons[0].contains("is on the known-hooks allowlist, but its upgrade authority could not be verified"));
@@ -277,7 +277,7 @@ fn test_unknown_extensions_escalation() {
         unknown_extensions: vec![99, 100],
     };
     
-    let score = token_risk_check::risk::score(&exts, &[], token_risk_check::risk::ConcentrationSignal::NotChecked, None);
+    let score = token_risk_check::risk::score(&exts, &[], token_risk_check::risk::ConcentrationSignal::NotChecked, None, None);
     
     assert_eq!(score.risk, "amber");
     assert!(score.reasons[0].contains("Mint has 2 extension type(s) not recognized by this scanner"));

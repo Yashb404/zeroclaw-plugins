@@ -8,6 +8,7 @@ pub struct AccountInfo {
     pub data: Vec<u8>,
     pub owner: [u8; 32],
     pub executable: bool,
+    pub slot: u64,
 }
 
 pub fn fetch_account_info(
@@ -34,9 +35,18 @@ pub fn fetch_account_info(
         return Err(format!("RPC error: {:?}", res_json["error"]));
     }
 
-    let value = res_json
+    let result_obj = res_json
         .get("result")
-        .and_then(|r| r.get("value"))
+        .ok_or_else(|| "result field not found".to_string())?;
+
+    let slot = result_obj
+        .get("context")
+        .and_then(|c| c.get("slot"))
+        .and_then(|s| s.as_u64())
+        .ok_or_else(|| "Missing or malformed slot in context".to_string())?;
+
+    let value = result_obj
+        .get("value")
         .ok_or_else(|| "account not found".to_string())?;
 
     if value.is_null() {
@@ -81,6 +91,7 @@ pub fn fetch_account_info(
         data,
         owner,
         executable,
+        slot,
     })
 }
 
@@ -88,14 +99,14 @@ pub fn fetch_mint_account(
     client: &dyn HttpClient,
     rpc_url: &str,
     mint: &str,
-) -> Result<Vec<u8>, String> {
-    fetch_account_info(client, rpc_url, mint).map(|info| info.data)
+) -> Result<(Vec<u8>, u64), String> {
+    fetch_account_info(client, rpc_url, mint).map(|info| (info.data, info.slot))
 }
 pub fn fetch_largest_accounts(
     client: &dyn HttpClient,
     rpc_url: &str,
     mint: &str,
-) -> Result<Vec<(String, u128)>, String> {
+) -> Result<(Vec<(String, u128)>, u64), String> {
     let body = serde_json::json!({
         "jsonrpc": "2.0",
         "id": 1,
@@ -112,9 +123,18 @@ pub fn fetch_largest_accounts(
         return Err(format!("RPC error: {:?}", res_json["error"]));
     }
 
-    let value_arr = res_json
+    let result_obj = res_json
         .get("result")
-        .and_then(|r| r.get("value"))
+        .ok_or_else(|| "result field not found".to_string())?;
+
+    let slot = result_obj
+        .get("context")
+        .and_then(|c| c.get("slot"))
+        .and_then(|s| s.as_u64())
+        .ok_or_else(|| "Missing or malformed slot in context".to_string())?;
+
+    let value_arr = result_obj
+        .get("value")
         .and_then(|v| v.as_array())
         .ok_or_else(|| "Missing or malformed value array in getTokenLargestAccounts".to_string())?;
 
@@ -137,5 +157,27 @@ pub fn fetch_largest_accounts(
         largest.push((address.to_string(), amount));
     }
 
-    Ok(largest)
+    Ok((largest, slot))
+}
+
+#[derive(Debug, PartialEq)]
+pub enum SlotConsistency {
+    Exact,
+    BoundedForward(u64),
+    Reversed,
+    ExcessiveSkew,
+}
+
+// 25 slots represents roughly 10-12 seconds on mainnet. Two sequential RPC calls
+// should easily complete within this window under normal latency. If skew exceeds
+// this, the data is dangerously non-atomic (e.g., node falling behind).
+pub const MAX_FORWARD_SLOT_SKEW: u64 = 25;
+
+pub fn check_slot_consistency(mint_slot: u64, largest_accounts_slot: u64) -> SlotConsistency {
+    match largest_accounts_slot.checked_sub(mint_slot) {
+        None => SlotConsistency::Reversed, // largest_accounts_slot < mint_slot - nonsensical
+        Some(0) => SlotConsistency::Exact,
+        Some(skew) if skew <= MAX_FORWARD_SLOT_SKEW => SlotConsistency::BoundedForward(skew),
+        Some(_) => SlotConsistency::ExcessiveSkew,
+    }
 }

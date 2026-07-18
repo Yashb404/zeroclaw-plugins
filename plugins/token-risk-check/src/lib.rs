@@ -3,10 +3,19 @@ pub mod program;
 pub mod risk;
 pub mod rpc;
 
+use serde::Deserialize;
+use std::collections::HashMap;
+
+#[derive(Deserialize, Debug)]
+#[serde(deny_unknown_fields)]
+pub struct ExecuteArgs {
+    pub mint: String,
+    #[serde(rename = "__config", default)]
+    pub config: HashMap<String, String>,
+}
+
 #[cfg(target_family = "wasm")]
 mod shim {
-    use std::collections::HashMap;
-    use serde::Deserialize;
     use waki::Client;
 
     wit_bindgen::generate!({
@@ -23,13 +32,7 @@ mod shim {
     use crate::risk::{score, top_holder_concentration_bps};
     use crate::rpc::{fetch_largest_accounts, fetch_mint_account, HttpClient};
 
-    #[derive(Deserialize)]
-    #[serde(deny_unknown_fields)]
-    struct ExecuteArgs {
-        mint: String,
-        #[serde(rename = "__config", default)]
-        config: HashMap<String, String>,
-    }
+    use crate::ExecuteArgs;
 
     struct WakiClient;
     impl HttpClient for WakiClient {
@@ -45,7 +48,20 @@ mod shim {
                 return Err(format!("HTTP Error: {}", res.status_code()));
             }
 
+            if let Some(cl_header) = res.header("content-length") {
+                if let Ok(cl_str) = cl_header.to_str() {
+                    if let Ok(cl) = cl_str.parse::<usize>() {
+                        if cl > 2 * 1024 * 1024 {
+                            return Err(format!("Response body too large: {} bytes exceeds 2 MiB limit", cl));
+                        }
+                    }
+                }
+            }
+
             let body_bytes = res.body().map_err(|e| format!("Failed to read body: {:?}", e))?;
+            if body_bytes.len() > 2 * 1024 * 1024 {
+                return Err(format!("Response body too large: {} bytes exceeds 2 MiB limit", body_bytes.len()));
+            }
             String::from_utf8(body_bytes)
                 .map_err(|e| format!("Invalid UTF-8 in response: {}", e))
         }
@@ -132,6 +148,17 @@ mod shim {
             let rpc_url = args.config.get("rpc_url")
                 .map(|s| s.as_str())
                 .unwrap_or("https://api.mainnet-beta.solana.com");
+
+            if !rpc_url.starts_with("https://") {
+                return finish(false, "".to_string(), Some("RPC URL must use https:// scheme".to_string()));
+            }
+            let without_scheme = &rpc_url["https://".len()..];
+            if without_scheme.contains('@') {
+                return finish(false, "".to_string(), Some("RPC URL must not contain embedded credentials".to_string()));
+            }
+            if without_scheme.is_empty() || without_scheme.starts_with('/') {
+                return finish(false, "".to_string(), Some("RPC URL must contain a valid host".to_string()));
+            }
             
             let raw_hooks = args.config.get("known_hooks").map(|s| s.as_str()).unwrap_or("");
             let known_hooks: Vec<String> = raw_hooks
@@ -142,9 +169,9 @@ mod shim {
 
             let client = WakiClient;
 
-            let mint_bytes = match fetch_mint_account(&client, rpc_url, &args.mint) {
-                Ok(b) => b,
-                Err(e) => return finish(false, "".to_string(), Some(e)),
+            let (mint_bytes, mint_slot) = match fetch_mint_account(&client, rpc_url, &args.mint) {
+                Ok(res) => res,
+                Err(e) => return finish(false, "".to_string(), Some(format!("Failed to fetch mint: {}", e))),
             };
 
             let exts = match parse_mint_extensions(&mint_bytes) {
@@ -152,15 +179,22 @@ mod shim {
                 Err(e) => return finish(false, "".to_string(), Some(e)),
             };
 
-            let largest = match fetch_largest_accounts(&client, rpc_url, &args.mint) {
-                Ok(l) => l,
+            let mut slot_consistency = None;
+
+            let (accounts, largest_accounts_slot) = match fetch_largest_accounts(&client, rpc_url, &args.mint) {
+                Ok(v) => v,
                 Err(e) => return finish(false, "".to_string(), Some(e)),
             };
 
-            let total_supply = exts.supply as u128;
+            let sc = crate::rpc::check_slot_consistency(mint_slot, largest_accounts_slot);
+            match sc {
+                crate::rpc::SlotConsistency::Reversed => return finish(false, "".to_string(), Some("RPC returned largest accounts from a slot before the mint fetch. Data is dangerously out of order.".to_string())),
+                crate::rpc::SlotConsistency::ExcessiveSkew => return finish(false, "".to_string(), Some("RPC returned largest accounts with excessive slot skew from the mint fetch. Data is dangerously stale.".to_string())),
+                _ => {}
+            }
+            slot_consistency = Some(sc);
+            let concentration_signal = top_holder_concentration_bps(&accounts, exts.supply);
 
-            let concentration = top_holder_concentration_bps(&largest, total_supply);
-            
             let mut hook_program_info = None;
             if let Some(hook) = exts.transfer_hook_program_id {
                 let hook_str = bs58::encode(hook).into_string();
@@ -203,7 +237,8 @@ mod shim {
                 }
             }
 
-            let assessment = score(&exts, &known_hooks, concentration, hook_program_info.as_ref()); 
+            let hook_info_ref = hook_program_info.as_ref();
+            let assessment = score(&exts, &known_hooks, concentration_signal, hook_info_ref, slot_consistency.as_ref()); 
 
             let output_str = match serde_json::to_string(&assessment) {
                 Ok(s) => s,

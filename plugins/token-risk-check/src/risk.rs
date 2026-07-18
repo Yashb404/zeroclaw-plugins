@@ -1,5 +1,4 @@
 use crate::extensions::{MintExtensions, TransferFeeConfig};
-use crate::program::HookProgramInfo;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -37,7 +36,8 @@ pub fn score(
     ext: &MintExtensions,
     known_hooks: &[String],
     concentration: ConcentrationSignal,
-    hook_program_info: Option<&HookProgramInfo>,
+    hook_program_info: Option<&crate::program::HookProgramInfo>,
+    slot_consistency: Option<&crate::rpc::SlotConsistency>,
 ) -> RiskAssessment {
     let mut reasons = Vec::new();
     let mut is_red = false;
@@ -135,6 +135,10 @@ pub fn score(
     if !ext.unknown_extensions.is_empty() {
         is_amber = true;
         reasons.push(format!("Mint has {} extension type(s) not recognized by this scanner — cannot verify safety.", ext.unknown_extensions.len()));
+    }
+
+    if let Some(crate::rpc::SlotConsistency::BoundedForward(skew)) = slot_consistency {
+        reasons.push(format!("Informational: Token distribution fetched {} slots after mint data. Data is slightly skewed but within acceptable bounds.", skew));
     }
 
     let risk = if is_red {
