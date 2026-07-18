@@ -24,6 +24,10 @@ In your host `manifest.toml` or configuration injection:
 - `known_hooks`: A comma-separated list of base58-encoded Program IDs representing vetted, safe transfer hooks (e.g. Jetty, Token ACL). 
 
 ## Worked Example
+
+``` Mock examples and transcripts below , not actually performed , will be updated later accordingly with live result ```
+
+
 When the LLM calls `execute({"mint": "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU"})`, the plugin:
 1. Fetches the mint account bytes.
 2. Sees a transfer hook to `MyHook1111...`.
@@ -42,8 +46,9 @@ When the LLM calls `execute({"mint": "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgA
 ## How to Test Locally with ZeroClaw Frontend
 
 1. **Build the Wasm Artifact**:
-   Ensure you have the `wasm32-wasip2` target installed, then build the release:
+   Ensure you have the `wasm32-wasip2` target installed, then run the strict lints and build the release:
    ```bash
+   cargo clippy --locked --all-targets -- -D warnings
    cargo build --target wasm32-wasip2 --release
    ```
    The binary will be located at `target/wasm32-wasip2/release/token_risk_check.wasm`.

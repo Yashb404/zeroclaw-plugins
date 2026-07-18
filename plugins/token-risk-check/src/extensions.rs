@@ -7,6 +7,7 @@ pub struct MintExtensions {
     pub transfer_hook_program_id: Option<[u8; 32]>,
     pub transfer_fee_config: Option<TransferFeeConfig>,
     pub default_account_state: Option<u8>,
+    pub unknown_extensions: Vec<u16>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -72,6 +73,7 @@ pub fn parse_mint_extensions(data: &[u8]) -> Result<MintExtensions, String> {
         transfer_hook_program_id: None,
         transfer_fee_config: None,
         default_account_state: None,
+        unknown_extensions: Vec::new(),
     };
 
     if data.len() <= 165 {
@@ -153,7 +155,10 @@ pub fn parse_mint_extensions(data: &[u8]) -> Result<MintExtensions, String> {
                 }
                 exts.transfer_hook_program_id = read_optional_nonzero_pubkey(ext_data, 32)?;
             }
-            _ => {}
+            //Replaced silently skipping a non recognized extension discriminant. This ensures any future updates to the token std don't break the plugin
+            _ => {
+                exts.unknown_extensions.push(ext_type);
+            }
         }
 
         offset = value_end;

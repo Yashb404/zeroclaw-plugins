@@ -132,6 +132,11 @@ pub fn score(
         reasons.push("Freeze authority is active; individual accounts can be frozen.".to_string());
     }
 
+    if !ext.unknown_extensions.is_empty() {
+        is_amber = true;
+        reasons.push(format!("Mint has {} extension type(s) not recognized by this scanner — cannot verify safety.", ext.unknown_extensions.len()));
+    }
+
     let risk = if is_red {
         "red"
     } else if is_amber {

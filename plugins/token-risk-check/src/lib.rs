@@ -24,6 +24,7 @@ mod shim {
     use crate::rpc::{fetch_largest_accounts, fetch_mint_account, HttpClient};
 
     #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
     struct ExecuteArgs {
         mint: String,
         #[serde(rename = "__config", default)]
@@ -74,6 +75,7 @@ mod shim {
         fn parameters_schema() -> String {
             serde_json::json!({
                 "type": "object",
+                "additionalProperties": false,
                 "properties": {
                     "mint": {
                         "type": "string",
@@ -117,6 +119,15 @@ mod shim {
                 Ok(a) => a,
                 Err(e) => return finish(false, "".to_string(), Some(format!("Invalid arguments: {}", e))),
             };
+
+            match bs58::decode(&args.mint).into_vec() {
+                Ok(bytes) => {
+                    if bytes.len() != 32 {
+                        return finish(false, "".to_string(), Some("Invalid mint address: must be exactly 32 bytes".to_string()));
+                    }
+                }
+                Err(e) => return finish(false, "".to_string(), Some(format!("Invalid mint address: {}", e))),
+            }
 
             let rpc_url = args.config.get("rpc_url")
                 .map(|s| s.as_str())

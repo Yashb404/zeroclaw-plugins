@@ -212,6 +212,7 @@ fn test_risk_score() {
         transfer_hook_program_id: None,
         transfer_fee_config: None,
         default_account_state: None,
+        unknown_extensions: vec![],
     };
     
     let score = token_risk_check::risk::score(&exts, &[], token_risk_check::risk::ConcentrationSignal::NotChecked, None);
@@ -231,6 +232,7 @@ fn test_risk_score_green() {
         transfer_hook_program_id: None,
         transfer_fee_config: None,
         default_account_state: None,
+        unknown_extensions: vec![],
     };
     
     let score = token_risk_check::risk::score(&exts, &[], token_risk_check::risk::ConcentrationSignal::NotChecked, None);
@@ -253,11 +255,30 @@ fn test_risk_score_unverified_known_hook() {
         transfer_hook_program_id: Some(hook_pubkey),
         transfer_fee_config: None,
         default_account_state: None,
+        unknown_extensions: vec![],
     };
     
-    // Pass hook_program_info = None to simulate a failed fetch/parse in a different context
-    let score = token_risk_check::risk::score(&exts, &[hook_str.clone()], token_risk_check::risk::ConcentrationSignal::NotChecked, None);
+    let score = token_risk_check::risk::score(&exts, &[hook_str], token_risk_check::risk::ConcentrationSignal::NotChecked, None);
     
     assert_eq!(score.risk, "amber");
     assert!(score.reasons[0].contains("is on the known-hooks allowlist, but its upgrade authority could not be verified"));
+}
+
+#[test]
+fn test_unknown_extensions_escalation() {
+    let exts = MintExtensions {
+        supply: 0,
+        mint_authority: None,
+        freeze_authority: None,
+        permanent_delegate: None,
+        transfer_hook_program_id: None,
+        transfer_fee_config: None,
+        default_account_state: None,
+        unknown_extensions: vec![99, 100],
+    };
+    
+    let score = token_risk_check::risk::score(&exts, &[], token_risk_check::risk::ConcentrationSignal::NotChecked, None);
+    
+    assert_eq!(score.risk, "amber");
+    assert!(score.reasons[0].contains("Mint has 2 extension type(s) not recognized by this scanner"));
 }

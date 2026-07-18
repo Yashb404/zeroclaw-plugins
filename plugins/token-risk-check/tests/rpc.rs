@@ -173,6 +173,7 @@ fn empty_exts() -> MintExtensions {
         transfer_hook_program_id: None,
         transfer_fee_config: None,
         default_account_state: None,
+        unknown_extensions: vec![],
     }
 }
 
