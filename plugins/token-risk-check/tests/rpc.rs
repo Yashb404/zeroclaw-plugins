@@ -24,7 +24,7 @@ fn test_fetch_mint_account_well_formed() {
                     "data": ["AQIDBA==", "base64"],
                     "executable": false,
                     "lamports": 1000,
-                    "owner": "1111",
+                    "owner": "11111111111111111111111111111111",
                     "rentEpoch": 0
                 }
             },
@@ -75,6 +75,8 @@ fn test_fetch_mint_account_malformed_data() {
             "result": {
                 "context": { "slot": 1 },
                 "value": {
+                    "executable": false,
+                    "owner": "11111111111111111111111111111111",
                     "data": "not an array"
                 }
             },
@@ -178,7 +180,7 @@ fn empty_exts() -> MintExtensions {
 fn test_score_concentration_none_not_checked() {
     let exts = empty_exts();
     // concentration was NOT checked (e.g. caller skipped RPC call)
-    let assessment = score(&exts, &[], None, false);
+    let assessment = score(&exts, &[], None, false, None);
     
     // Should be green by default since we explicitly opted out of checking, 
     // and no other red flags exist.
@@ -189,7 +191,7 @@ fn test_score_concentration_none_not_checked() {
 fn test_score_concentration_none_zero_supply() {
     let exts = empty_exts();
     // concentration WAS checked, but returned None (e.g. supply == 0)
-    let assessment = score(&exts, &[], None, true);
+    let assessment = score(&exts, &[], None, true, None);
     
     // This is a hard error signal from the network (checked but supply 0), so it's red.
     assert_eq!(assessment.risk, "red");
@@ -201,41 +203,41 @@ fn test_score_concentration_boundaries() {
     let exts = empty_exts();
 
     // 2999 bps: Green
-    let a = score(&exts, &[], Some(2999), true);
+    let a = score(&exts, &[], Some(2999), true, None);
     assert_eq!(a.risk, "green"); // No flags escalated
 
     // 3000 bps: Green
-    let b = score(&exts, &[], Some(3000), true);
+    let b = score(&exts, &[], Some(3000), true, None);
     assert_eq!(b.risk, "green"); 
 
     // 3001 bps: Green (but gets a reason string)
-    let c = score(&exts, &[], Some(3001), true);
+    let c = score(&exts, &[], Some(3001), true, None);
     assert_eq!(c.risk, "green");
     assert!(c.reasons[0].contains(">30%"));
 
     // 4999 bps: Green + reason
-    let d = score(&exts, &[], Some(4999), true);
+    let d = score(&exts, &[], Some(4999), true, None);
     assert_eq!(d.risk, "green");
 
     // 5000 bps: Green + reason
-    let e = score(&exts, &[], Some(5000), true);
+    let e = score(&exts, &[], Some(5000), true, None);
     assert_eq!(e.risk, "green");
 
     // 5001 bps: Amber
-    let f = score(&exts, &[], Some(5001), true);
+    let f = score(&exts, &[], Some(5001), true, None);
     assert_eq!(f.risk, "amber");
     assert!(f.reasons[0].contains(">50%"));
 
     // 7999 bps: Amber
-    let g = score(&exts, &[], Some(7999), true);
+    let g = score(&exts, &[], Some(7999), true, None);
     assert_eq!(g.risk, "amber");
 
     // 8000 bps: Amber
-    let h = score(&exts, &[], Some(8000), true);
+    let h = score(&exts, &[], Some(8000), true, None);
     assert_eq!(h.risk, "amber");
 
     // 8001 bps: Red
-    let i = score(&exts, &[], Some(8001), true);
+    let i = score(&exts, &[], Some(8001), true, None);
     assert_eq!(i.risk, "red");
     assert!(i.reasons[0].contains(">80%"));
 }

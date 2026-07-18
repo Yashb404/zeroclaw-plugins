@@ -1,4 +1,5 @@
 use crate::extensions::{MintExtensions, TransferFeeConfig};
+use crate::program::HookProgramInfo;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -30,6 +31,7 @@ pub fn score(
     known_hooks: &[String],
     top_holder_concentration_bps: Option<u32>,
     was_concentration_checked: bool,
+    hook_program_info: Option<&HookProgramInfo>,
 ) -> RiskAssessment {
     let mut reasons = Vec::new();
     let mut is_red = false;
@@ -93,7 +95,16 @@ pub fn score(
     if let Some(hook) = ext.transfer_hook_program_id {
         let hook_str = bs58::encode(hook).into_string();
         if known_hooks.contains(&hook_str) {
-            reasons.push(format!("Transfer hook program is a known compliance hook ({}).", hook_str));
+            if let Some(info) = hook_program_info {
+                if !info.is_upgradeable || info.upgrade_authority.is_none() {
+                    reasons.push(format!("Transfer hook program is a known compliance hook ({}) and is immutable.", hook_str));
+                } else {
+                    is_amber = true;
+                    reasons.push(format!("Recognized hook program ({}) can still be silently replaced (upgrade authority active).", hook_str));
+                }
+            } else {
+                reasons.push(format!("Transfer hook program is a known compliance hook ({}).", hook_str));
+            }
         } else {
             is_amber = true;
             reasons.push(format!("Unknown transfer hook program ({}) can arbitrarily block or revert transfers.", hook_str));

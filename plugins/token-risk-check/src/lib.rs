@@ -1,4 +1,5 @@
 pub mod extensions;
+pub mod program;
 pub mod risk;
 pub mod rpc;
 
@@ -149,8 +150,50 @@ mod shim {
 
             let concentration = top_holder_concentration_bps(&largest, total_supply);
             
+            let mut hook_program_info = None;
+            if let Some(hook) = exts.transfer_hook_program_id {
+                let hook_str = bs58::encode(hook).into_string();
+                let prog_acc = match crate::rpc::fetch_account_info(&client, rpc_url, &hook_str) {
+                    Ok(a) => a,
+                    Err(e) => return finish(false, "".to_string(), Some(format!("Failed to fetch hook program: {}", e))),
+                };
+
+                let ptr = match crate::program::parse_program_pointer(&prog_acc.data, &prog_acc.owner, prog_acc.executable) {
+                    Ok(p) => p,
+                    Err(e) => return finish(false, "".to_string(), Some(format!("Failed to parse hook program: {}", e))),
+                };
+
+                match ptr {
+                    crate::program::ProgramPointer::Immutable => {
+                        hook_program_info = Some(crate::program::HookProgramInfo {
+                            is_executable: prog_acc.executable,
+                            is_upgradeable: false,
+                            upgrade_authority: None,
+                        });
+                    }
+                    crate::program::ProgramPointer::Upgradeable(addr) => {
+                        let pdata_str = bs58::encode(addr).into_string();
+                        let pdata_acc = match crate::rpc::fetch_account_info(&client, rpc_url, &pdata_str) {
+                            Ok(a) => a,
+                            Err(e) => return finish(false, "".to_string(), Some(format!("Failed to fetch hook ProgramData: {}", e))),
+                        };
+
+                        let upgrade_authority = match crate::program::parse_programdata_account(&pdata_acc.data) {
+                            Ok(auth) => auth,
+                            Err(e) => return finish(false, "".to_string(), Some(format!("Failed to parse hook ProgramData: {}", e))),
+                        };
+
+                        hook_program_info = Some(crate::program::HookProgramInfo {
+                            is_executable: prog_acc.executable,
+                            is_upgradeable: true,
+                            upgrade_authority,
+                        });
+                    }
+                }
+            }
+
             // Hardcode was_concentration_checked to true in production
-            let assessment = score(&exts, &known_hooks, concentration, true); 
+            let assessment = score(&exts, &known_hooks, concentration, true, hook_program_info.as_ref()); 
 
             let output_str = match serde_json::to_string(&assessment) {
                 Ok(s) => s,

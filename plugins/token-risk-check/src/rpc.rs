@@ -4,17 +4,23 @@ pub trait HttpClient {
     fn post_json(&self, url: &str, body: &str) -> Result<String, String>;
 }
 
-pub fn fetch_mint_account(
+pub struct AccountInfo {
+    pub data: Vec<u8>,
+    pub owner: [u8; 32],
+    pub executable: bool,
+}
+
+pub fn fetch_account_info(
     client: &dyn HttpClient,
     rpc_url: &str,
-    mint: &str,
-) -> Result<Vec<u8>, String> {
+    pubkey: &str,
+) -> Result<AccountInfo, String> {
     let body = serde_json::json!({
         "jsonrpc": "2.0",
         "id": 1,
         "method": "getAccountInfo",
         "params": [
-            mint,
+            pubkey,
             { "encoding": "base64" }
         ]
     })
@@ -37,6 +43,25 @@ pub fn fetch_mint_account(
         return Err("account not found".to_string());
     }
 
+    let executable = value
+        .get("executable")
+        .and_then(|e| e.as_bool())
+        .ok_or_else(|| "Missing or malformed executable field".to_string())?;
+
+    let owner_str = value
+        .get("owner")
+        .and_then(|o| o.as_str())
+        .ok_or_else(|| "Missing or malformed owner field".to_string())?;
+
+    let mut owner = [0u8; 32];
+    let decoded_owner = bs58::decode(owner_str)
+        .into_vec()
+        .map_err(|e| format!("Failed to decode owner: {}", e))?;
+    if decoded_owner.len() != 32 {
+        return Err("Owner pubkey is not 32 bytes".to_string());
+    }
+    owner.copy_from_slice(&decoded_owner);
+
     let data_arr = value
         .get("data")
         .and_then(|d| d.as_array())
@@ -48,11 +73,24 @@ pub fn fetch_mint_account(
         .ok_or_else(|| "Missing or malformed base64 string in data array".to_string())?;
 
     use base64::{engine::general_purpose, Engine as _};
-    general_purpose::STANDARD
+    let data = general_purpose::STANDARD
         .decode(base64_str)
-        .map_err(|e| format!("Base64 decode failed: {}", e))
+        .map_err(|e| format!("Base64 decode failed: {}", e))?;
+
+    Ok(AccountInfo {
+        data,
+        owner,
+        executable,
+    })
 }
 
+pub fn fetch_mint_account(
+    client: &dyn HttpClient,
+    rpc_url: &str,
+    mint: &str,
+) -> Result<Vec<u8>, String> {
+    fetch_account_info(client, rpc_url, mint).map(|info| info.data)
+}
 pub fn fetch_largest_accounts(
     client: &dyn HttpClient,
     rpc_url: &str,
