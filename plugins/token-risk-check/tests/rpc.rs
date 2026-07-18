@@ -154,14 +154,14 @@ fn test_top_holder_concentration_bps_normal() {
     
     // (6000 / 10000) = 60% = 6000 bps
     let bps = top_holder_concentration_bps(&holders, supply);
-    assert_eq!(bps, Some(6000));
+    assert_eq!(bps, token_risk_check::risk::ConcentrationSignal::Calculated(6000));
 }
 
 #[test]
 fn test_top_holder_concentration_bps_zero_supply() {
     let holders = vec![("addr1".to_string(), 1000)];
     let bps = top_holder_concentration_bps(&holders, 0);
-    assert_eq!(bps, None);
+    assert_eq!(bps, token_risk_check::risk::ConcentrationSignal::ZeroSupply);
 }
 
 fn empty_exts() -> MintExtensions {
@@ -180,7 +180,7 @@ fn empty_exts() -> MintExtensions {
 fn test_score_concentration_none_not_checked() {
     let exts = empty_exts();
     // concentration was NOT checked (e.g. caller skipped RPC call)
-    let assessment = score(&exts, &[], None, false, None);
+    let assessment = score(&exts, &[], token_risk_check::risk::ConcentrationSignal::NotChecked, None);
     
     // Should be green by default since we explicitly opted out of checking, 
     // and no other red flags exist.
@@ -191,7 +191,7 @@ fn test_score_concentration_none_not_checked() {
 fn test_score_concentration_none_zero_supply() {
     let exts = empty_exts();
     // concentration WAS checked, but returned None (e.g. supply == 0)
-    let assessment = score(&exts, &[], None, true, None);
+    let assessment = score(&exts, &[], token_risk_check::risk::ConcentrationSignal::ZeroSupply, None);
     
     // This is a hard error signal from the network (checked but supply 0), so it's red.
     assert_eq!(assessment.risk, "red");
@@ -203,41 +203,41 @@ fn test_score_concentration_boundaries() {
     let exts = empty_exts();
 
     // 2999 bps: Green
-    let a = score(&exts, &[], Some(2999), true, None);
+    let a = score(&exts, &[], token_risk_check::risk::ConcentrationSignal::Calculated(2999), None);
     assert_eq!(a.risk, "green"); // No flags escalated
 
     // 3000 bps: Green
-    let b = score(&exts, &[], Some(3000), true, None);
+    let b = score(&exts, &[], token_risk_check::risk::ConcentrationSignal::Calculated(3000), None);
     assert_eq!(b.risk, "green"); 
 
     // 3001 bps: Green (but gets a reason string)
-    let c = score(&exts, &[], Some(3001), true, None);
+    let c = score(&exts, &[], token_risk_check::risk::ConcentrationSignal::Calculated(3001), None);
     assert_eq!(c.risk, "green");
     assert!(c.reasons[0].contains(">30%"));
 
     // 4999 bps: Green + reason
-    let d = score(&exts, &[], Some(4999), true, None);
+    let d = score(&exts, &[], token_risk_check::risk::ConcentrationSignal::Calculated(4999), None);
     assert_eq!(d.risk, "green");
 
     // 5000 bps: Green + reason
-    let e = score(&exts, &[], Some(5000), true, None);
+    let e = score(&exts, &[], token_risk_check::risk::ConcentrationSignal::Calculated(5000), None);
     assert_eq!(e.risk, "green");
 
     // 5001 bps: Amber
-    let f = score(&exts, &[], Some(5001), true, None);
+    let f = score(&exts, &[], token_risk_check::risk::ConcentrationSignal::Calculated(5001), None);
     assert_eq!(f.risk, "amber");
     assert!(f.reasons[0].contains(">50%"));
 
     // 7999 bps: Amber
-    let g = score(&exts, &[], Some(7999), true, None);
+    let g = score(&exts, &[], token_risk_check::risk::ConcentrationSignal::Calculated(7999), None);
     assert_eq!(g.risk, "amber");
 
     // 8000 bps: Amber
-    let h = score(&exts, &[], Some(8000), true, None);
+    let h = score(&exts, &[], token_risk_check::risk::ConcentrationSignal::Calculated(8000), None);
     assert_eq!(h.risk, "amber");
 
     // 8001 bps: Red
-    let i = score(&exts, &[], Some(8001), true, None);
+    let i = score(&exts, &[], token_risk_check::risk::ConcentrationSignal::Calculated(8001), None);
     assert_eq!(i.risk, "red");
     assert!(i.reasons[0].contains(">80%"));
 }

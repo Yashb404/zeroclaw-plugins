@@ -70,3 +70,27 @@ fn test_programdata_truncated() {
     let res = parse_programdata_account(&data);
     assert!(res.is_err());
 }
+
+#[test]
+fn test_programdata_wrong_discriminant() {
+    let mut data = vec![2, 0, 0, 0]; // Program-shaped, not ProgramData
+    let programdata_address = [5u8; 32];
+    data.extend_from_slice(&programdata_address);
+    // Needs at least 45 bytes to pass the length check, so pad it
+    data.extend_from_slice(&[0u8; 9]);
+
+    let res = parse_programdata_account(&data);
+    assert!(res.unwrap_err().contains("Expected UpgradeableLoaderState::ProgramData"));
+}
+
+#[test]
+fn test_program_pointer_wrong_discriminant() {
+    let owner = BPF_LOADER_UPGRADEABLE_ID;
+    let mut data = vec![3, 0, 0, 0]; // ProgramData-shaped, not Program
+    data.extend_from_slice(&12345u64.to_le_bytes()); // slot
+    data.push(1); // Some authority
+    data.extend_from_slice(&[9u8; 32]); // authority pubkey
+
+    let res = parse_program_pointer(&data, &owner, true);
+    assert!(res.unwrap_err().contains("Expected UpgradeableLoaderState::Program"));
+}

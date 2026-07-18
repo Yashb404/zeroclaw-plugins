@@ -11,6 +11,7 @@ pub struct HookProgramInfo {
     pub upgrade_authority: Option<[u8; 32]>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProgramPointer {
     Immutable,
     Upgradeable([u8; 32]), // ProgramData address

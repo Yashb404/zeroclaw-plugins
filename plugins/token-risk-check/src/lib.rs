@@ -192,8 +192,7 @@ mod shim {
                 }
             }
 
-            // Hardcode was_concentration_checked to true in production
-            let assessment = score(&exts, &known_hooks, concentration, true, hook_program_info.as_ref()); 
+            let assessment = score(&exts, &known_hooks, concentration, hook_program_info.as_ref()); 
 
             let output_str = match serde_json::to_string(&assessment) {
                 Ok(s) => s,

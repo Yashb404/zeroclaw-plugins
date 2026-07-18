@@ -214,7 +214,7 @@ fn test_risk_score() {
         default_account_state: None,
     };
     
-    let score = token_risk_check::risk::score(&exts, &[], None, false, None);
+    let score = token_risk_check::risk::score(&exts, &[], token_risk_check::risk::ConcentrationSignal::NotChecked, None);
     debug_log!("Calculated risk score: {:?}", score);
     assert_eq!(score.risk, "amber");
     assert_eq!(score.reasons.len(), 1);
@@ -233,10 +233,31 @@ fn test_risk_score_green() {
         default_account_state: None,
     };
     
-    let score = token_risk_check::risk::score(&exts, &[], None, false, None);
+    let score = token_risk_check::risk::score(&exts, &[], token_risk_check::risk::ConcentrationSignal::NotChecked, None);
     debug_log!("Calculated risk score: {:?}", score);
     assert_eq!(score.risk, "green");
     // It should have exactly one reason explaining why it's green
     assert_eq!(score.reasons.len(), 1);
     assert!(score.reasons[0].contains("No high-risk extensions found"));
+}
+
+#[test]
+fn test_risk_score_unverified_known_hook() {
+    let hook_pubkey = [2; 32];
+    let hook_str = bs58::encode(hook_pubkey).into_string();
+    let exts = MintExtensions {
+        supply: 0,
+        mint_authority: None,
+        freeze_authority: None,
+        permanent_delegate: None,
+        transfer_hook_program_id: Some(hook_pubkey),
+        transfer_fee_config: None,
+        default_account_state: None,
+    };
+    
+    // Pass hook_program_info = None to simulate a failed fetch/parse in a different context
+    let score = token_risk_check::risk::score(&exts, &[hook_str.clone()], token_risk_check::risk::ConcentrationSignal::NotChecked, None);
+    
+    assert_eq!(score.risk, "amber");
+    assert!(score.reasons[0].contains("is on the known-hooks allowlist, but its upgrade authority could not be verified"));
 }

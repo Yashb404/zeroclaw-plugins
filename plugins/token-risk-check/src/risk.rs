@@ -8,12 +8,19 @@ pub struct RiskAssessment {
     pub reasons: Vec<String>,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum ConcentrationSignal {
+    NotChecked,
+    ZeroSupply,
+    Calculated(u32),
+}
+
 pub fn top_holder_concentration_bps(
     top_holders: &[(String, u128)],
     total_supply: u128,
-) -> Option<u32> {
+) -> ConcentrationSignal {
     if total_supply == 0 {
-        return None;
+        return ConcentrationSignal::ZeroSupply;
     }
 
     let mut sum: u128 = 0;
@@ -23,22 +30,29 @@ pub fn top_holder_concentration_bps(
 
     let bps = (sum.saturating_mul(10_000)) / total_supply;
     // Cap at 10000 just in case
-    Some(std::cmp::min(bps as u32, 10_000))
+    ConcentrationSignal::Calculated(std::cmp::min(bps as u32, 10_000))
 }
 
 pub fn score(
     ext: &MintExtensions,
     known_hooks: &[String],
-    top_holder_concentration_bps: Option<u32>,
-    was_concentration_checked: bool,
+    concentration: ConcentrationSignal,
     hook_program_info: Option<&HookProgramInfo>,
 ) -> RiskAssessment {
     let mut reasons = Vec::new();
     let mut is_red = false;
     let mut is_amber = false;
 
-    if was_concentration_checked {
-        if let Some(bps) = top_holder_concentration_bps {
+    match concentration {
+        ConcentrationSignal::NotChecked => {
+            // Do nothing
+        }
+        ConcentrationSignal::ZeroSupply => {
+            // Zero supply treated as red because we cannot assess distribution, not because zero supply is itself malicious.
+            is_red = true;
+            reasons.push("Mint supply is zero or unreadable — cannot assess distribution.".to_string());
+        }
+        ConcentrationSignal::Calculated(bps) => {
             // > 80% (8000 bps): High risk of immediate rug pull/price manipulation since a small group controls supply
             if bps > 8000 {
                 is_red = true;
@@ -53,10 +67,6 @@ pub fn score(
             else if bps > 3000 {
                 reasons.push(format!("Top holders control >30% of supply ({} bps). Notable concentration.", bps));
             }
-        } else {
-            // Zero supply treated as red because we cannot assess distribution, not because zero supply is itself malicious.
-            is_red = true;
-            reasons.push("Mint supply is zero or unreadable — cannot assess distribution.".to_string());
         }
     }
 
@@ -103,7 +113,8 @@ pub fn score(
                     reasons.push(format!("Recognized hook program ({}) can still be silently replaced (upgrade authority active).", hook_str));
                 }
             } else {
-                reasons.push(format!("Transfer hook program is a known compliance hook ({}).", hook_str));
+                is_amber = true;
+                reasons.push(format!("Transfer hook program ({}) is on the known-hooks allowlist, but its upgrade authority could not be verified.", hook_str));
             }
         } else {
             is_amber = true;
