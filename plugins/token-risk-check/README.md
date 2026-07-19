@@ -8,7 +8,8 @@ This plugin serves as the critical security middleware for LLM agents interactin
 1. **Decodes Token-2022 Extensions**: Identifies permanent delegates, default frozen account states, excessive transfer fees, and transfer hooks directly from the raw byte buffer.
 2. **Analyzes Transfer Hooks**: Fetches the hook program pointer. If the hook is upgradeable, it traverses to the `ProgramData` PDA to check for an active upgrade authority.
 3. **Measures Concentration**: Fetches the top 10 token accounts and calculates supply concentration, flagging severe whale dominance.
-4. **Deterministic Scoring**: Outputs a `{ risk: "red|amber|green", reasons: [...] }` JSON payload. Zero free-text LLM judgment is used in the risk assessment.
+4. **Validates RPC Slot Consistency**: Cross-references the slot heights from multiple RPC fetches (`getAccountInfo` vs `getTokenLargestAccounts`) to ensure data is atomic. Fails closed if the node returns heavily skewed or out-of-order data.
+5. **Deterministic Scoring**: Outputs a `{ risk: "red|amber|green", reasons: [...] }` JSON payload. Zero free-text LLM judgment is used in the risk assessment.
 
 ## Custody Tier
 **T0 (Read-Only / Zero-Custody)**
