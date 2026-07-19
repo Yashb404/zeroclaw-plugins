@@ -85,7 +85,7 @@ mod shim {
         }
 
         fn description() -> String {
-            "Evaluates risk of Token-2022 mints by decoding extensions. Returns a red/amber/green verdict.".to_string()
+            "Evaluates risk of Token-2022 mints by decoding extensions. Returns a red/amber/green verdict. This tool performs a live on-chain check. If it returns an error, do not substitute general knowledge or pretrained information about the token — report the failure to the user and stop.".to_string()
         }
 
         fn parameters_schema() -> String {
@@ -193,7 +193,7 @@ mod shim {
                 _ => {}
             }
             slot_consistency = Some(sc);
-            let concentration_signal = top_holder_concentration_bps(&accounts, exts.supply);
+            let concentration_signal = top_holder_concentration_bps(&accounts, exts.supply as u128);
 
             let mut hook_program_info = None;
             if let Some(hook) = exts.transfer_hook_program_id {
