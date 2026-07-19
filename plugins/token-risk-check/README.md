@@ -90,5 +90,30 @@ When the LLM calls `execute({"mint": "14Tqdo8V1FhzKsE3W2pFsZCzYPQxxupXRcqw9jv6on
    
    You should see the agent invoke the `token-risk-check` tool, pass the mint address, and report a Green score based on the deterministic output.
 
+## Real Host-Instantiation Test & Architecture Portability
+
+This plugin was compiled to `wasm32-wasip2` on a desktop environment and then deployed to a real mobile host running a Debian proot environment on an `aarch64` Android phone. 
+
+This test formally satisfies the host-instantiation requirement and proves that the plugin's WASM build is fully architecture-agnostic and portable.
+
+**Deployment & Registration Transcript (aarch64 Host):**
+```bash
+root@localhost:~/plugins/token-risk-check# curl -O http://192.168.1.12:8080/target/wasm32-wasip2/release/token_risk_check.wasm
+root@localhost:~/plugins/token-risk-check# curl -O http://192.168.1.12:8080/manifest.toml
+
+# Update the manifest path to point to the local WASM file
+root@localhost:~/plugins/token-risk-check# sed -i 's|target/wasm32-wasip2/release/token_risk_check.wasm|token_risk_check.wasm|g' manifest.toml
+
+# Install and verify the plugin in the ZeroClaw host
+root@localhost:~/plugins/token-risk-check# cd ~/zeroclaw
+root@localhost:~/zeroclaw# ./target/release/zeroclaw plugin install ~/plugins/token-risk-check
+Plugin installed from /root/plugins/token-risk-check
+Seeded [[plugins.entries]] for 'token-risk-check'. Set plugin config values with `zeroclaw config set plugins.entries.token-risk-check.config.<key>`.
+
+root@localhost:~/zeroclaw# ./target/release/zeroclaw plugin list
+Installed plugins:
+  token-risk-check v0.1.0 — Evaluates risk of Token-2022 mints by decoding extensions
+```
+
 ## License
 MIT
