@@ -151,21 +151,18 @@ mod shim {
     struct WakiClient;
     impl HttpClient for WakiClient {
         fn post_json(&self, url: &str, body: &str) -> Result<String, String> {
-            let req = zeroclaw::plugin::http_client::HttpRequest {
-                method: zeroclaw::plugin::http_client::HttpMethod::Post,
-                url: url.to_string(),
-                headers: vec![("Content-Type".to_string(), "application/json".to_string())],
-                body: Some(body.as_bytes().to_vec()),
-            };
-            
-            let resp = zeroclaw::plugin::http_client::send_request(&req)
-                .map_err(|e| format!("HTTP request failed: {}", e))?;
+            let resp = waki::Client::new()
+                .post(url)
+                .header("Content-Type", "application/json")
+                .body(body.as_bytes())
+                .send()
+                .map_err(|e| format!("HTTP send error: {}", e))?;
                 
-            if resp.status_code >= 400 {
-                return Err(format!("HTTP error status: {}", resp.status_code));
+            if resp.status_code() < 200 || resp.status_code() >= 300 {
+                return Err(format!("HTTP error status: {}", resp.status_code()));
             }
             
-            let body_bytes = resp.body.ok_or_else(|| "Empty response body".to_string())?;
+            let body_bytes = resp.body().map_err(|_| "Failed to read response body".to_string())?;
             String::from_utf8(body_bytes).map_err(|e| format!("Invalid UTF-8 in response: {}", e))
         }
     }
@@ -218,27 +215,28 @@ mod shim {
         }
 
         fn execute(args_json: String) -> Result<ToolResult, String> {
+            let start = std::time::Instant::now();
             let finish = |success: bool, output: String, error: Option<String>| -> Result<ToolResult, String> {
                 // 10. Exactly one log_record call per execute
                 let mut attrs = std::collections::HashMap::new();
                 attrs.insert("args_len".to_string(), args_json.len().to_string());
                 
                 let outcome = if success { 
-                    zeroclaw::plugin::logger::PluginOutcome::Success 
+                    zeroclaw::plugin::logging::PluginOutcome::Success 
                 } else { 
-                    zeroclaw::plugin::logger::PluginOutcome::Failure 
+                    zeroclaw::plugin::logging::PluginOutcome::Failure 
                 };
                 
                 let msg = error.clone().unwrap_or_else(|| "Attestation successful".to_string());
                 
-                zeroclaw::plugin::logger::log_record(
-                    zeroclaw::plugin::logger::LogLevel::Info,
-                    &zeroclaw::plugin::logger::PluginEvent {
+                zeroclaw::plugin::logging::log_record(
+                    zeroclaw::plugin::logging::LogLevel::Info,
+                    &zeroclaw::plugin::logging::PluginEvent {
                         function_name: "execute".to_string(),
-                        action: zeroclaw::plugin::logger::PluginAction::Evaluate,
-                        outcome,
-                        duration_ms: 0,
-                        attrs,
+                        action: zeroclaw::plugin::logging::PluginAction::Complete,
+                        outcome: Some(outcome),
+                        duration_ms: Some(start.elapsed().as_millis() as u64),
+                        attrs: Some(serde_json::to_string(&attrs).unwrap_or_default()),
                         message: msg,
                     }
                 );
@@ -258,8 +256,10 @@ mod shim {
             let client = WakiClient;
             match crate::orchestrate_attestation(&args_json, &client, current_ts) {
                 Ok(output) => {
-                    let out_json = serde_json::to_string(&output).unwrap_or_default();
-                    finish(true, out_json, None)
+                    match serde_json::to_string(&output) {
+                        Ok(out_json) => finish(true, out_json, None),
+                        Err(e) => finish(false, "".to_string(), Some(format!("Failed to serialize output: {}", e))),
+                    }
                 },
                 Err(e) => finish(false, "".to_string(), Some(e)),
             }
