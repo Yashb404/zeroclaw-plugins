@@ -32,7 +32,7 @@ fn test_fetch_mint_account_well_formed() {
         }"#.to_string(),
     };
 
-    let (data, slot) = fetch_mint_account(&client, "http://mock", "mock_mint").unwrap();
+    let (data, slot) = fetch_mint_account(&client, "http://mock", "11111111111111111111111111111111").unwrap();
     assert_eq!(data, vec![1, 2, 3, 4]);
     assert_eq!(slot, 1);
 }
@@ -47,7 +47,7 @@ fn test_fetch_mint_account_error_field() {
         }"#.to_string(),
     };
 
-    let res = fetch_mint_account(&client, "http://mock", "mock_mint");
+    let res = fetch_mint_account(&client, "http://mock", "11111111111111111111111111111111");
     assert!(res.unwrap_err().contains("RPC error"));
 }
 
@@ -64,7 +64,7 @@ fn test_fetch_mint_account_not_found() {
         }"#.to_string(),
     };
 
-    let res = fetch_mint_account(&client, "http://mock", "mock_mint");
+    let res = fetch_mint_account(&client, "http://mock", "11111111111111111111111111111111");
     assert_eq!(res.unwrap_err(), "account not found");
 }
 
@@ -85,7 +85,7 @@ fn test_fetch_mint_account_malformed_data() {
         }"#.to_string(),
     };
 
-    let res = fetch_mint_account(&client, "http://mock", "mock_mint");
+    let res = fetch_mint_account(&client, "http://mock", "11111111111111111111111111111111");
     assert!(res.unwrap_err().contains("Missing or malformed data field"));
 }
 
@@ -105,7 +105,7 @@ fn test_fetch_largest_accounts_well_formed() {
         }"#.to_string(),
     };
 
-    let (accounts, slot) = fetch_largest_accounts(&client, "http://mock", "mock_mint").unwrap();
+    let (accounts, slot) = fetch_largest_accounts(&client, "http://mock", "11111111111111111111111111111111").unwrap();
     assert_eq!(accounts.len(), 2);
     assert_eq!(slot, 1);
     assert_eq!(accounts[0], ("addr1".to_string(), 1000));
@@ -122,7 +122,7 @@ fn test_fetch_largest_accounts_error() {
         }"#.to_string(),
     };
 
-    let res = fetch_largest_accounts(&client, "http://mock", "mock_mint");
+    let res = fetch_largest_accounts(&client, "http://mock", "11111111111111111111111111111111");
     assert!(res.unwrap_err().contains("RPC error"));
 }
 
@@ -142,7 +142,7 @@ fn test_fetch_largest_accounts_malformed_amount() {
         }"#.to_string(),
     };
 
-    let res = fetch_largest_accounts(&client, "http://mock", "mock_mint");
+    let res = fetch_largest_accounts(&client, "http://mock", "11111111111111111111111111111111");
     assert!(res.unwrap_err().contains("Failed to parse amount as u128"));
 }
 

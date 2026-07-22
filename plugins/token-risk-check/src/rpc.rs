@@ -16,6 +16,13 @@ pub fn fetch_account_info(
     rpc_url: &str,
     pubkey: &str,
 ) -> Result<AccountInfo, String> {
+    let decoded = bs58::decode(pubkey)
+        .into_vec()
+        .map_err(|e| format!("Invalid account address: {}", e))?;
+    if decoded.len() != 32 {
+        return Err("Invalid account address: must be exactly 32 bytes".to_string());
+    }
+
     let body = serde_json::json!({
         "jsonrpc": "2.0",
         "id": 1,
@@ -107,6 +114,13 @@ pub fn fetch_largest_accounts(
     rpc_url: &str,
     mint: &str,
 ) -> Result<(Vec<(String, u128)>, u64), String> {
+    let decoded = bs58::decode(mint)
+        .into_vec()
+        .map_err(|e| format!("Invalid account address: {}", e))?;
+    if decoded.len() != 32 {
+        return Err("Invalid account address: must be exactly 32 bytes".to_string());
+    }
+
     let body = serde_json::json!({
         "jsonrpc": "2.0",
         "id": 1,

@@ -94,7 +94,11 @@ pub fn score(
     if let Some(TransferFeeConfig { transfer_fee_basis_points, withdraw_withheld_authority: _ }) = ext.transfer_fee_config {
         // 1000 bps = 10%. We flag >10% as unusually high (amber) because legitimate protocols 
         // typically charge 0.1% to 1%, whereas honeypots/scam tokens often charge extreme fees (e.g., 99%).
-        if transfer_fee_basis_points > 1000 {
+        // 5000 bps = 50%. This is an extreme fee and acts as a soft honeypot, so we flag it as red.
+        if transfer_fee_basis_points > 5000 {
+            is_red = true;
+            reasons.push(format!("Transfer fee is exceptionally high ({} bps) - possible honeypot.", transfer_fee_basis_points));
+        } else if transfer_fee_basis_points > 1000 {
             is_amber = true;
             reasons.push(format!("Transfer fee is unusually high ({} bps).", transfer_fee_basis_points));
         } else if transfer_fee_basis_points > 0 {

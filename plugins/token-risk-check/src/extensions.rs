@@ -122,13 +122,20 @@ pub fn parse_mint_extensions(data: &[u8]) -> Result<MintExtensions, String> {
         match ext_type {
             1 => {
                 // TransferFeeConfig
+                if exts.transfer_fee_config.is_some() {
+                    return Err("Duplicate TransferFeeConfig extension found".into());
+                }
                 if ext_data.len() < 108 {
                     return Err("Truncated TransferFeeConfig".into());
                 }
                 let withdraw_withheld_authority = read_optional_nonzero_pubkey(ext_data, 32)?;
-                // Reading newer_transfer_fee (which becomes effective post-epoch change)
-                let transfer_fee_basis_points =
-                    u16::from_le_bytes([ext_data[106], ext_data[107]]);
+                
+                // Read both older and newer fees, as the older fee is the one currently in effect,
+                // and newer fee takes effect next epoch. Both pose immediate or near-term risk.
+                let older_transfer_fee_bps = u16::from_le_bytes([ext_data[88], ext_data[89]]);
+                let newer_transfer_fee_bps = u16::from_le_bytes([ext_data[106], ext_data[107]]);
+                let transfer_fee_basis_points = std::cmp::max(older_transfer_fee_bps, newer_transfer_fee_bps);
+                
                 exts.transfer_fee_config = Some(TransferFeeConfig {
                     transfer_fee_basis_points,
                     withdraw_withheld_authority,
@@ -136,6 +143,9 @@ pub fn parse_mint_extensions(data: &[u8]) -> Result<MintExtensions, String> {
             }
             6 => {
                 // DefaultAccountState
+                if exts.default_account_state.is_some() {
+                    return Err("Duplicate DefaultAccountState extension found".into());
+                }
                 if ext_data.is_empty() {
                     return Err("Truncated DefaultAccountState".into());
                 }
@@ -143,6 +153,9 @@ pub fn parse_mint_extensions(data: &[u8]) -> Result<MintExtensions, String> {
             }
             12 => {
                 // PermanentDelegate
+                if exts.permanent_delegate.is_some() {
+                    return Err("Duplicate PermanentDelegate extension found".into());
+                }
                 if ext_data.len() < 32 {
                     return Err("Truncated PermanentDelegate".into());
                 }
@@ -150,8 +163,12 @@ pub fn parse_mint_extensions(data: &[u8]) -> Result<MintExtensions, String> {
             }
             14 => {
                 // TransferHook
-                if ext_data.len() < 64 {
-                    return Err("Truncated TransferHook".into());
+                if exts.transfer_hook_program_id.is_some() || ext_data.len() < 64 {
+                    // Just return Err if truncated or duplicate
+                    if ext_data.len() < 64 {
+                        return Err("Truncated TransferHook".into());
+                    }
+                    return Err("Duplicate TransferHook extension found".into());
                 }
                 exts.transfer_hook_program_id = read_optional_nonzero_pubkey(ext_data, 32)?;
             }

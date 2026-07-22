@@ -179,8 +179,6 @@ mod shim {
                 Err(e) => return finish(false, "".to_string(), Some(e)),
             };
 
-            let mut slot_consistency = None;
-
             let (accounts, largest_accounts_slot) = match fetch_largest_accounts(&client, rpc_url, &args.mint) {
                 Ok(v) => v,
                 Err(e) => return finish(false, "".to_string(), Some(e)),
@@ -192,7 +190,7 @@ mod shim {
                 crate::rpc::SlotConsistency::ExcessiveSkew => return finish(false, "".to_string(), Some("RPC returned largest accounts with excessive slot skew from the mint fetch. Data is dangerously stale.".to_string())),
                 _ => {}
             }
-            slot_consistency = Some(sc);
+            let slot_consistency = Some(sc);
             let concentration_signal = top_holder_concentration_bps(&accounts, exts.supply as u128);
 
             let mut hook_program_info = None;

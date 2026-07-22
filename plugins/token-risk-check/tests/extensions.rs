@@ -1,15 +1,10 @@
 use token_risk_check::extensions::*;
 
-//TODO: Remove verbosity before final submission , it is here for debugging purposes
-const VERBOSE: bool = false;
-
 macro_rules! debug_log {
-    ($($arg:tt)*) => {
-        if VERBOSE {
-            println!($($arg)*);
-        }
-    }
+    ($($arg:tt)*) => {}
 }
+
+
 
 fn create_coption_pubkey(pk: Option<[u8; 32]>) -> Vec<u8> {
     let mut data = Vec::new();
@@ -281,4 +276,75 @@ fn test_unknown_extensions_escalation() {
     
     assert_eq!(score.risk, "amber");
     assert!(score.reasons[0].contains("Mint has 2 extension type(s) not recognized by this scanner"));
+}
+
+#[test]
+fn test_parse_duplicate_extensions() {
+    debug_log!("--- Running test_parse_duplicate_extensions ---");
+    let mut data = create_base_mint(None, None, 0);
+    data.extend_from_slice(&create_padding());
+    
+    let mut tf_data_1 = vec![0u8; 108];
+    tf_data_1[106] = 100; // First extension has fee
+    
+    let mut tf_data_2 = vec![0u8; 108];
+    tf_data_2[106] = 0; // Second extension has no fee
+    
+    // Append the first TransferFeeConfig
+    data.extend_from_slice(&create_tlv(1, &tf_data_1));
+    // Append a duplicate TransferFeeConfig
+    data.extend_from_slice(&create_tlv(1, &tf_data_2));
+    
+    let result = parse_mint_extensions(&data);
+    debug_log!("Result on duplicate data: {:?}", result);
+    assert!(result.is_err());
+    assert!(result.unwrap_err().contains("Duplicate TransferFeeConfig"));
+}
+
+#[test]
+fn test_parse_transfer_fee_max_logic() {
+    debug_log!("--- Running test_parse_transfer_fee_max_logic ---");
+    let mut data = create_base_mint(None, None, 0);
+    data.extend_from_slice(&create_padding());
+    
+    let mut tf_data = vec![0u8; 108];
+    
+    // Set older_transfer_fee_bps to 10000 (100%)
+    let older_bps: u16 = 10000;
+    tf_data[88..90].copy_from_slice(&older_bps.to_le_bytes());
+    
+    // Set newer_transfer_fee_bps to 0 (0%)
+    let newer_bps: u16 = 0;
+    tf_data[106..108].copy_from_slice(&newer_bps.to_le_bytes());
+    
+    data.extend_from_slice(&create_tlv(1, &tf_data));
+    
+    let exts = parse_mint_extensions(&data).unwrap();
+    let config = exts.transfer_fee_config.unwrap();
+    
+    // It should pick the max of older (10000) and newer (0)
+    assert_eq!(config.transfer_fee_basis_points, 10000);
+}
+
+#[test]
+fn test_risk_score_extreme_fee_red() {
+    debug_log!("--- Running test_risk_score_extreme_fee_red ---");
+    let exts = MintExtensions {
+        supply: 0,
+        mint_authority: None,
+        freeze_authority: None,
+        permanent_delegate: None,
+        transfer_hook_program_id: None,
+        transfer_fee_config: Some(TransferFeeConfig {
+            transfer_fee_basis_points: 5001, // > 50%
+            withdraw_withheld_authority: None,
+        }),
+        default_account_state: None,
+        unknown_extensions: vec![],
+    };
+    
+    let score = token_risk_check::risk::score(&exts, &[], token_risk_check::risk::ConcentrationSignal::NotChecked, None, None);
+    
+    assert_eq!(score.risk, "red");
+    assert!(score.reasons[0].contains("exceptionally high"));
 }

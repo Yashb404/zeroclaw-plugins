@@ -6,6 +6,8 @@ This plugin serves as the critical security middleware for LLM agents interactin
 
 ## What it does
 1. **Decodes Token-2022 Extensions**: Identifies permanent delegates, default frozen account states, excessive transfer fees, and transfer hooks directly from the raw byte buffer.
+   - **Parser Differential Defense**: Strictly enforces extension uniqueness, rejecting duplicate extensions that could smuggle malicious config past the scanner.
+   - **Epoch-Transition Fee Defense**: Evaluates both the `older_transfer_fee` (active now) and `newer_transfer_fee` (active next epoch), taking the maximum of the two to prevent fees from being hidden behind future epochs.
 2. **Analyzes Transfer Hooks**: Fetches the hook program pointer. If the hook is upgradeable, it traverses to the `ProgramData` PDA to check for an active upgrade authority.
 3. **Measures Concentration**: Fetches the top 10 token accounts and calculates supply concentration, flagging severe whale dominance.
 4. **Validates RPC Slot Consistency**: Cross-references the slot heights from multiple RPC fetches (`getAccountInfo` vs `getTokenLargestAccounts`) to ensure data is atomic. Fails closed if the node returns heavily skewed or out-of-order data.
