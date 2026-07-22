@@ -40,7 +40,8 @@ mod shim {
             let client = Client::new();
             let req = client.post(url)
                 .body(body)
-                .header("content-type", "application/json");
+                .header("content-type", "application/json")
+                .connect_timeout(std::time::Duration::from_secs(5));
 
             let res = req.send().map_err(|e| format!("HTTP send failed: {:?}", e))?;
             
