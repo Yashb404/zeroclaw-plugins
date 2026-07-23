@@ -4,12 +4,21 @@ pub trait HttpClient {
     fn post_json(&self, url: &str, body: &str) -> Result<String, String>;
 }
 
-pub fn fetch_latest_blockhash(
+pub struct NonceData {
+    pub nonce_hash: [u8; 32],
+    pub authority: [u8; 32],
+}
+
+pub fn fetch_nonce_account(
     client: &dyn HttpClient,
     rpc_url: &str,
-) -> Result<([u8; 32], u64), String> {
-    let body = r#"{"jsonrpc":"2.0","id":1,"method":"getLatestBlockhash","params":[{"commitment":"confirmed"}]}"#;
-    let resp_str = client.post_json(rpc_url, body)?;
+    nonce_account_b58: &str,
+) -> Result<NonceData, String> {
+    let body = format!(
+        r#"{{"jsonrpc":"2.0","id":1,"method":"getAccountInfo","params":["{}",{{"encoding":"base64","commitment":"confirmed"}}]}}"#,
+        nonce_account_b58
+    );
+    let resp_str = client.post_json(rpc_url, &body)?;
     
     let resp: Value = serde_json::from_str(&resp_str)
         .map_err(|e| format!("Invalid JSON response: {}", e))?;
@@ -28,24 +37,49 @@ pub fn fetch_latest_blockhash(
     let value = result.get("value")
         .ok_or_else(|| "Missing 'result.value' field".to_string())?;
         
-    let blockhash_b58 = value.get("blockhash")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| "Missing or invalid 'blockhash'".to_string())?;
-        
-    let slot = result.get("context")
-        .and_then(|c| c.get("slot"))
-        .and_then(|s| s.as_u64())
-        .ok_or_else(|| "Missing or invalid 'context.slot'".to_string())?;
-        
-    let decoded = bs58::decode(blockhash_b58).into_vec()
-        .map_err(|e| format!("Invalid blockhash bs58: {}", e))?;
-        
-    if decoded.len() != 32 {
-        return Err(format!("Blockhash decoded to {} bytes, expected 32", decoded.len()));
+    if value.is_null() {
+        return Err("Nonce account does not exist (value is null)".to_string());
     }
     
-    let mut blockhash = [0u8; 32];
-    blockhash.copy_from_slice(&decoded);
+    let data_array = value.get("data")
+        .and_then(|d| d.as_array())
+        .ok_or_else(|| "Missing or invalid 'data' field".to_string())?;
+        
+    if data_array.is_empty() {
+        return Err("Empty 'data' array".to_string());
+    }
     
-    Ok((blockhash, slot))
+    let base64_data = data_array[0].as_str()
+        .ok_or_else(|| "Data is not a string".to_string())?;
+        
+    use base64::{engine::general_purpose, Engine as _};
+    let data_bytes = general_purpose::STANDARD.decode(base64_data)
+        .map_err(|e| format!("Failed to base64 decode account data: {}", e))?;
+        
+    if data_bytes.len() < 80 {
+        return Err(format!("Nonce account data too short: {} bytes, expected >= 80", data_bytes.len()));
+    }
+    
+    let version = u32::from_le_bytes(data_bytes[0..4].try_into().unwrap());
+    if version != 1 {
+        return Err(format!("Unsupported nonce account version: expected 1, got {}", version));
+    }
+    
+    let state = u32::from_le_bytes(data_bytes[4..8].try_into().unwrap());
+    if state != 1 { // 1 = Initialized
+        return Err(format!("Nonce account is not initialized (state={})", state));
+    }
+    
+    let mut authority = [0u8; 32];
+    authority.copy_from_slice(&data_bytes[8..40]);
+    
+    let mut nonce_hash = [0u8; 32];
+    nonce_hash.copy_from_slice(&data_bytes[40..72]);
+    
+    Ok(NonceData {
+        nonce_hash,
+        authority,
+    })
 }
+
+

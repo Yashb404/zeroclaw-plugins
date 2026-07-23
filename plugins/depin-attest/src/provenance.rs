@@ -20,7 +20,8 @@ pub fn verify_provenance(
         .verify(message, &signature)
         .map_err(|e| format!("Invalid signature: {}", e))?;
 
-    let age = current_timestamp - reading_timestamp;
+    let age = current_timestamp.checked_sub(reading_timestamp)
+        .ok_or_else(|| "Timestamp arithmetic overflow".to_string())?;
     if age < 0 {
         return Err("Reading timestamp is in the future".to_string());
     }

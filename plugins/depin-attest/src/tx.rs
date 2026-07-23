@@ -34,6 +34,7 @@ struct AccountInfo {
 
 pub fn build_unsigned_v0_tx(
     fee_payer: &[u8; 32],
+    // The `recent_blockhash` parameter in the V0 message format. In this plugin, this holds a durable nonce hash, not a fetched blockhash.
     recent_blockhash: &[u8; 32],
     instructions: &[Instruction],
 ) -> Result<Vec<u8>, String> {
@@ -130,18 +131,13 @@ pub fn build_unsigned_v0_tx(
         num_readonly_unsigned_accounts,
     };
     
-    let mut out = Vec::new();
-    
-    // Unsigned marker: 1 byte zero array length for signatures
-    out.push(0x00);
-    
-    // Version prefix: 0x80 (highest bit set, version 0)
-    out.push(0x80);
-    
-    // Header
-    out.push(header.num_required_signatures);
-    out.push(header.num_readonly_signed_accounts);
-    out.push(header.num_readonly_unsigned_accounts);
+    let mut out = vec![
+        0x00, // Unsigned marker: 1 byte zero array length for signatures
+        0x80, // Versioned transaction prefix
+        header.num_required_signatures,
+        header.num_readonly_signed_accounts,
+        header.num_readonly_unsigned_accounts,
+    ];
     
     // Account keys
     out.extend(encode_compact_u16(final_keys.len() as u16));

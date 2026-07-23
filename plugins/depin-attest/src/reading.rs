@@ -15,8 +15,8 @@ pub fn validate_reading(reading: &SensorReading) -> Result<(), String> {
     if reading.sensor_id.trim().is_empty() {
         return Err("sensor_id cannot be empty".to_string());
     }
-    if reading.sensor_id.contains('|') {
-        return Err("sensor_id cannot contain the pipe (|) character".to_string());
+    if reading.sensor_id.chars().any(|c| !c.is_ascii_alphanumeric() && c != '_' && c != '-') {
+        return Err("sensor_id can only contain alphanumeric characters, underscores, and hyphens".to_string());
     }
     let parsed_val = reading.value_str.parse::<f64>()
         .map_err(|_| "value_str is not a valid number".to_string())?;

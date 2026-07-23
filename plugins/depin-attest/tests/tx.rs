@@ -252,3 +252,78 @@ fn full_tx_end_to_end_matches_expected_structure() {
     // Total len
     assert_eq!(tx.len(), data_end + 1);
 }
+
+#[test]
+fn message_v0_signer_readonly_header_count() {
+    let fee_payer = [1u8; 32];
+    let signer_readonly = [2u8; 32];
+    let recent_blockhash = [9u8; 32];
+    
+    let mut ix = build_memo_instruction("test").unwrap();
+    ix.accounts.push(AccountMeta {
+        pubkey: signer_readonly,
+        is_signer: true,
+        is_writable: false,
+    });
+    
+    let tx = build_unsigned_v0_tx(&fee_payer, &recent_blockhash, &[ix]).unwrap();
+    
+    // Header should be:
+    // num_required_signatures = 2 (fee_payer + signer_readonly)
+    // num_readonly_signed_accounts = 1 (signer_readonly)
+    // num_readonly_unsigned_accounts = 1 (memo program)
+    assert_eq!(tx[2], 2);
+    assert_eq!(tx[3], 1);
+    assert_eq!(tx[4], 1);
+}
+
+#[test]
+fn message_v0_instruction_account_indices_preserved() {
+    let fee_payer = [1u8; 32];
+    let recent_blockhash = [9u8; 32];
+    let acc1 = [2u8; 32]; // writable, unsigned
+    let acc2 = [3u8; 32]; // readonly, unsigned
+    let acc3 = [4u8; 32]; // readonly, signer
+    
+    let ix1 = Instruction {
+        program_id: [5u8; 32],
+        accounts: vec![
+            AccountMeta { pubkey: acc1, is_signer: false, is_writable: true },
+            AccountMeta { pubkey: acc2, is_signer: false, is_writable: false },
+            AccountMeta { pubkey: acc3, is_signer: true, is_writable: false },
+        ],
+        data: vec![4, 0, 0, 0],
+    };
+    
+    let tx = build_unsigned_v0_tx(&fee_payer, &recent_blockhash, &[ix1]).unwrap();
+    
+    // Accounts order should be:
+    // 0: fee_payer (signer, writable)
+    // 1: acc3 (signer, readonly)
+    // 2: acc1 (unsigned, writable)
+    // 3: acc2 (unsigned, readonly)
+    // 4: ix1.program_id (unsigned, readonly)
+    
+    // keys len
+    assert_eq!(tx[5], 5);
+    
+    let mut offset = 6 + 5 * 32 + 32; // Skip compact-u16(0x05), 5 keys, recent_blockhash
+    
+    // Instructions len
+    assert_eq!(tx[offset], 1);
+    offset += 1;
+    
+    // ix1 program_id index
+    assert_eq!(tx[offset], 4);
+    offset += 1;
+    
+    // ix1 accounts len
+    assert_eq!(tx[offset], 3);
+    offset += 1;
+    
+    // ix1 accounts indices
+    // Must be exactly [2, 3, 1] mapped from [acc1, acc2, acc3] -> [unsigned+writable, unsigned+readonly, signer+readonly]
+    assert_eq!(tx[offset], 2);
+    assert_eq!(tx[offset+1], 3);
+    assert_eq!(tx[offset+2], 1);
+}

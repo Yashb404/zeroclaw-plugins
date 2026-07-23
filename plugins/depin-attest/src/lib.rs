@@ -3,13 +3,14 @@ pub mod reading;
 pub mod memo;
 pub mod tx;
 pub mod rpc;
+pub mod nonce;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::reading::{validate_reading, SensorReading};
 use crate::provenance::verify_provenance;
-use crate::rpc::{HttpClient, fetch_latest_blockhash};
+use crate::rpc::HttpClient;
 use crate::memo::build_memo_instruction;
 use crate::tx::{build_unsigned_v0_tx, to_base64};
 
@@ -23,8 +24,10 @@ pub struct ExecuteArgs {
 #[derive(Serialize, Debug)]
 pub struct OrchestrationOutput {
     pub tx_b64: String,
-    pub nonce: String,
-    pub slot: u64,
+    pub nonce_account: String,
+    pub fee_payer: String,
+    pub nonce_authority: String,
+    pub required_signatures: String,
     pub memo_summary: String,
 }
 
@@ -48,6 +51,43 @@ pub fn orchestrate_attestation(
     // 2. Deserialize args
     let args: ExecuteArgs = serde_json::from_value(raw_val)
         .map_err(|e| format!("Invalid arguments: {}", e))?;
+
+    // Extract and resolve config keys
+    let fee_payer_b58 = config.get("fee_payer")
+        .map(|s| s.as_str())
+        .ok_or_else(|| "Missing 'fee_payer' in config".to_string())?;
+
+    let nonce_account_b58 = config.get("nonce_account")
+        .map(|s| s.as_str())
+        .ok_or_else(|| "Missing 'nonce_account' in config".to_string())?;
+
+    let nonce_authority_b58 = config.get("nonce_authority")
+        .map(|s| s.as_str())
+        .unwrap_or(fee_payer_b58);
+
+    let decoded_fee_payer = bs58::decode(fee_payer_b58).into_vec()
+        .map_err(|e| format!("Invalid base58 in fee_payer: {}", e))?;
+    if decoded_fee_payer.len() != 32 {
+        return Err(format!("fee_payer decoded to {} bytes, expected 32", decoded_fee_payer.len()));
+    }
+    let mut fee_payer = [0u8; 32];
+    fee_payer.copy_from_slice(&decoded_fee_payer);
+
+    let decoded_nonce_account = bs58::decode(nonce_account_b58).into_vec()
+        .map_err(|e| format!("Invalid base58 in nonce_account: {}", e))?;
+    if decoded_nonce_account.len() != 32 {
+        return Err(format!("nonce_account decoded to {} bytes, expected 32", decoded_nonce_account.len()));
+    }
+    let mut nonce_account = [0u8; 32];
+    nonce_account.copy_from_slice(&decoded_nonce_account);
+
+    let decoded_nonce_authority = bs58::decode(nonce_authority_b58).into_vec()
+        .map_err(|e| format!("Invalid base58 in nonce_authority: {}", e))?;
+    if decoded_nonce_authority.len() != 32 {
+        return Err(format!("nonce_authority decoded to {} bytes, expected 32", decoded_nonce_authority.len()));
+    }
+    let mut nonce_authority = [0u8; 32];
+    nonce_authority.copy_from_slice(&decoded_nonce_authority);
 
     // 3. validate_reading
     validate_reading(&args.reading)
@@ -91,46 +131,48 @@ pub fn orchestrate_attestation(
     verify_provenance(&pubkey, message, &sig, args.reading.timestamp, current_timestamp)
         .map_err(|e| format!("Provenance verification failed: {}", e))?;
 
-    // 6. Fetch RPC Blockhash
+    // 6. Fetch RPC Nonce Account
     let rpc_url = config.get("rpc_url")
         .map(|s| s.as_str())
         .unwrap_or("https://api.mainnet-beta.solana.com");
         
-    let (blockhash, slot) = fetch_latest_blockhash(client, rpc_url)?;
+    let nonce_data = crate::rpc::fetch_nonce_account(client, rpc_url, nonce_account_b58)?;
+    if nonce_data.authority != nonce_authority {
+        return Err("On-chain nonce authority does not match configured nonce_authority".to_string());
+    }
 
-    // 7. Derive nonce
-    let nonce = format!("{}-{}", args.reading.sensor_id, slot);
+    // 7. Derive nonce string for memo
+    let nonce_account_short = if nonce_account_b58.len() >= 8 {
+        &nonce_account_b58[..8]
+    } else {
+        nonce_account_b58
+    };
 
     // 8. Build memo text and transaction
     let memo_text = format!(
-        "zc-depin|{}|{}|{}|{}|{}",
-        args.reading.sensor_id, args.reading.value_str, args.reading.unit, args.reading.timestamp, nonce
+        "zc-depin|{}|{}|{}|{}|n:{}",
+        args.reading.sensor_id, args.reading.value_str, args.reading.unit, args.reading.timestamp, nonce_account_short
     );
-    let ix = build_memo_instruction(&memo_text)?;
+    let memo_ix = build_memo_instruction(&memo_text)?;
+    let advance_nonce_ix = crate::nonce::build_advance_nonce_instruction(&nonce_account, &nonce_authority);
     
-    let fee_payer_b58 = config.get("fee_payer")
-        .map(|s| s.as_str())
-        .ok_or_else(|| "Missing 'fee_payer' in config".to_string())?;
-        
-    let decoded_fee_payer = bs58::decode(fee_payer_b58).into_vec()
-        .map_err(|e| format!("Invalid base58 in fee_payer: {}", e))?;
-        
-    if decoded_fee_payer.len() != 32 {
-        return Err(format!("fee_payer decoded to {} bytes, expected 32", decoded_fee_payer.len()));
-    }
-    
-    let mut fee_payer = [0u8; 32];
-    fee_payer.copy_from_slice(&decoded_fee_payer);
-
-    let tx_bytes = build_unsigned_v0_tx(&fee_payer, &blockhash, &[ix])?;
+    let tx_bytes = build_unsigned_v0_tx(&fee_payer, &nonce_data.nonce_hash, &[advance_nonce_ix, memo_ix])?;
 
     // 9. Base64 encode and output
     let tx_b64 = to_base64(&tx_bytes);
 
+    let required_signatures = if fee_payer == nonce_authority {
+        "fee_payer".to_string()
+    } else {
+        "fee_payer, nonce_authority".to_string()
+    };
+
     Ok(OrchestrationOutput {
         tx_b64,
-        nonce,
-        slot,
+        nonce_account: nonce_account_b58.to_string(),
+        fee_payer: fee_payer_b58.to_string(),
+        nonce_authority: nonce_authority_b58.to_string(),
+        required_signatures,
         memo_summary: memo_text,
     })
 }
